@@ -11,6 +11,22 @@ fairy will try all available keys to decrypt a message before failing.  Upon suc
 ./fairymq --generate-queue-key-pair example
 ```
 
+## Native Clients
+**************
+- **GO** https://github.com/fairymq/fairymq-go
+- **Node.JS** (coming soon)
+- **Java** (coming soon)
+- **Python** (coming soon)
+- **C#** (coming soon)
+
+## Native Consumers
+**************
+- **GO** (coming soon)
+- **Node.JS** (coming soon)
+- **Java** (coming soon)
+- **Python** (coming soon)
+- **C#** (coming soon)
+
 
 ## Protocol
 ***************

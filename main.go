@@ -248,6 +248,7 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("CLEAR")):
 						delete(fairyMQ.Queues, queue)
+						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("ENQUEUE")):
 						spl := bytes.Split(plaintext, []byte("\r\n"))

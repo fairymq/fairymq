@@ -21,12 +21,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -164,10 +166,12 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 		Context       context.Context
 	}
 	tests := []struct {
-		name   string
-		fields fields
+		name    string
+		fields  fields
+		want    []byte
+		wantErr bool
 	}{
-		// todo
+		{name: "test", wantErr: false, fields: fields{Wg: &sync.WaitGroup{}, SignalChannel: make(chan os.Signal)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -180,7 +184,44 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 				ContextCancel: tt.fields.ContextCancel,
 				Context:       tt.fields.Context,
 			}
-			fairyMQ.StartUDPListener()
+
+			fairyMQ.Wg.Add(1)
+			go fairyMQ.StartUDPListener()
+
+			fairyMQ.Context, fairyMQ.ContextCancel = context.WithCancel(context.Background())
+
+			fairyMQ.Wg.Add(1)
+			go func() {
+				defer fairyMQ.Wg.Done()
+				udpAddr, err := net.ResolveUDPAddr("udp", "0.0.0.0:5991")
+				if err != nil {
+					t.Errorf("FairyMQ_StartUDPListener() error = %v", err)
+				}
+
+				conn, err := net.DialUDP("udp", nil, udpAddr)
+				if err != nil {
+					t.Errorf("FairyMQ_StartUDPListener() error = %v", err)
+				}
+
+				_, err = conn.Write([]byte("testing, 1, 2, 3\n"))
+				if err != nil {
+					t.Errorf("FairyMQ_StartUDPListener() error = %v", err)
+				}
+
+				data, err := bufio.NewReader(conn).ReadString('\n')
+				if err != nil {
+					t.Errorf("FairyMQ_StartUDPListener() error = %v", err)
+				}
+
+				if strings.HasPrefix(data, "NACK") {
+					fairyMQ.ContextCancel()
+				} else {
+					t.Errorf("FairyMQ_StartUDPListener() error = incorrect response.  expecting NACK")
+				}
+			}()
+
+			fairyMQ.Wg.Wait()
+
 		})
 	}
 }

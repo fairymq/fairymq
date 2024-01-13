@@ -69,5 +69,20 @@ SHIFT
 CLEAR
 ```
 
+#### New Consumer
+``` 
+NEW CONSUMER 0.0.0.0:5992
+```
+HOST:PORT
 
+#### Remove Consumer
+``` 
+REM CONSUMER 0.0.0.0:5992
+```
+HOST:PORT
+
+#### Remove Consumer
+``` 
+LIST CONSUMERS
+```
 

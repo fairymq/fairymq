@@ -21,6 +21,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -48,8 +49,15 @@ type FairyMQ struct {
 	Wg            *sync.WaitGroup      // Waitgroup pointer
 	SignalChannel chan os.Signal       // Signal channel
 	Queues        map[string][]Message // In-memory queues
+	Consumers     []Consumer           // Consumer
 	ContextCancel context.CancelFunc   // To cancel on signal
 	Context       context.Context      // For signal cancellation
+}
+
+// Consumer is a queue consumer
+type Consumer struct {
+	Queue   string // Name of queue
+	Address string // Consumer address i.e 0.0.0.0:5992
 }
 
 // Message is a queue message
@@ -159,6 +167,77 @@ func (fairyMQ *FairyMQ) GenerateQueueKeypair(queue string) error {
 	return nil
 }
 
+// SendToConsumers sends message to consumers of a queue
+func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte) {
+	for _, c := range fairyMQ.Consumers {
+		if c.Queue == queue {
+			attempts := 0 // Max attempts to reach server is 10
+
+			// Resolve UDP address
+			udpAddr, err := net.ResolveUDPAddr("udp", c.Address)
+			if err != nil {
+				continue
+			}
+
+			// Dial address
+			conn, err := net.DialUDP("udp", nil, udpAddr)
+			if err != nil {
+				continue
+			}
+
+			publicKeyPEM, err := os.ReadFile(fmt.Sprintf("keys/%s.public.pem", queue))
+			if err != nil {
+				continue
+			}
+
+			publicKeyBlock, _ := pem.Decode(publicKeyPEM)
+			publicKey, err := x509.ParsePKIXPublicKey(publicKeyBlock.Bytes)
+			if err != nil {
+				continue
+			}
+
+			ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, publicKey.(*rsa.PublicKey), data)
+			if err != nil {
+				continue
+			}
+
+			// Attempt consumer
+			goto try
+
+		try:
+
+			// Send to server
+			_, err = conn.Write(ciphertext)
+			if err != nil {
+				continue
+			}
+
+			// If nothing received in 60 milliseconds.  Retry
+			err = conn.SetReadDeadline(time.Now().Add(60 * time.Millisecond))
+			if err != nil {
+				continue
+			}
+
+			// Read from consumer
+			_, err = bufio.NewReader(conn).ReadString('\n')
+			if err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					attempts += 1
+
+					if attempts < 10 {
+						goto try
+					} else {
+						continue
+					}
+				} else {
+					continue
+				}
+			}
+
+		}
+	}
+}
+
 func (fairyMQ *FairyMQ) StartUDPListener() {
 	defer fairyMQ.Wg.Done()
 	var err error
@@ -250,16 +329,46 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 						delete(fairyMQ.Queues, queue)
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 						goto cont
+					case bytes.HasPrefix(plaintext, []byte("NEW CONSUMER ")):
+						spl := bytes.Split(plaintext, []byte("NEW CONSUMER "))
+						fairyMQ.Consumers = append(fairyMQ.Consumers, Consumer{
+							Queue:   queue,
+							Address: strings.TrimSpace(string(spl[1])),
+						})
+						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+						goto cont
+					case bytes.HasPrefix(plaintext, []byte("REM CONSUMER ")):
+						spl := bytes.Split(plaintext, []byte("REM CONSUMER "))
+						fairyMQ.Consumers = append(fairyMQ.Consumers, Consumer{
+							Queue:   queue,
+							Address: strings.TrimSpace(string(spl[1])),
+						})
+						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+						goto cont
+					case bytes.HasPrefix(plaintext, []byte("LIST CONSUMERS")):
+						var consumers []string
+
+						for _, c := range fairyMQ.Consumers {
+							if c.Queue == queue {
+								consumers = append(consumers, c.Address)
+							}
+						}
+
+						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf(strings.Join(consumers, ","))), []byte("\r\n")...), addr)
+						goto cont
 					case bytes.HasPrefix(plaintext, []byte("ENQUEUE")):
 						spl := bytes.Split(plaintext, []byte("\r\n"))
 						timestamp, err := strconv.ParseInt(string(spl[1]), 10, 64)
 						if err != nil {
 							goto cont
 						}
+
 						fairyMQ.Queues[queue] = append(fairyMQ.Queues[queue], Message{
 							Data:      spl[2],
 							Timestamp: time.UnixMicro(timestamp),
 						})
+
+						go fairyMQ.SendToConsumers(queue, plaintext)
 
 						sort.Slice(fairyMQ.Queues[queue], func(i, j int) bool {
 							return fairyMQ.Queues[queue][i].Timestamp.After(fairyMQ.Queues[queue][j].Timestamp)

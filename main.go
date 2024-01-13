@@ -207,6 +207,7 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 		if err != nil {
 			continue
 		}
+
 		for _, key := range keys {
 			if !key.IsDir() {
 
@@ -225,63 +226,42 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 						goto nack
 					}
 
+					queue := strings.Split(key.Name(), ".")[0]
+
 					switch {
-					//case bytes.HasPrefix(plaintext, []byte("QUEUES")):
-					//	queues := maps.Keys(fairyMQ.Queues)
-					//	fairyMQ.Conn.WriteToUDP(append([]byte(strings.Join(queues, ",")), []byte("\r\n")...), addr)
-					//	goto cont
-					case bytes.HasPrefix(plaintext, []byte("FIRST IN ")):
-						spl := bytes.Split(plaintext, []byte("\r\n"))
-						queue := bytes.ReplaceAll(spl[0], []byte("FIRST IN "), []byte(""))
-						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[string(queue)][0].Data, []byte("\r\n")...), addr)
+					case bytes.HasPrefix(plaintext, []byte("FIRST IN")):
+						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue][0].Data, []byte("\r\n")...), addr)
 						goto cont
-					case bytes.HasPrefix(plaintext, []byte("LAST IN ")):
-						spl := bytes.Split(plaintext, []byte("\r\n"))
-						queue := bytes.ReplaceAll(spl[0], []byte("LAST IN "), []byte(""))
-						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[string(queue)][len(fairyMQ.Queues[string(queue)])-1].Data, []byte("\r\n")...), addr)
+					case bytes.HasPrefix(plaintext, []byte("LAST IN")):
+						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue][len(fairyMQ.Queues[string(queue)])-1].Data, []byte("\r\n")...), addr)
 						goto cont
-					case bytes.HasPrefix(plaintext, []byte("LENGTH OF ")):
-						spl := bytes.Split(plaintext, []byte("\r\n"))
-						queue := bytes.ReplaceAll(spl[0], []byte("LENGTH OF "), []byte(""))
+					case bytes.HasPrefix(plaintext, []byte("LENGTH")):
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("%d messages", len(fairyMQ.Queues[string(queue)]))), []byte("\r\n")...), addr)
 						goto cont
-					case bytes.HasPrefix(plaintext, []byte("POP ")):
-						spl := bytes.Split(plaintext, []byte("\r\n"))
-						queue := bytes.ReplaceAll(spl[0], []byte("POP "), []byte(""))
-						fairyMQ.Queues[string(queue)] = fairyMQ.Queues[string(queue)][:len(fairyMQ.Queues[string(queue)])-1]
+					case bytes.HasPrefix(plaintext, []byte("POP")):
+						fairyMQ.Queues[queue] = fairyMQ.Queues[queue][:len(fairyMQ.Queues[string(queue)])-1]
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 						goto cont
-					case bytes.HasPrefix(plaintext, []byte("POP ")):
-						spl := bytes.Split(plaintext, []byte("\r\n"))
-						queue := bytes.ReplaceAll(spl[0], []byte("POP "), []byte(""))
-						fairyMQ.Queues[string(queue)] = fairyMQ.Queues[string(queue)][:len(fairyMQ.Queues[string(queue)])-1]
+					case bytes.HasPrefix(plaintext, []byte("SHIFT")):
+						fairyMQ.Queues[queue] = fairyMQ.Queues[queue][1:]
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 						goto cont
-					case bytes.HasPrefix(plaintext, []byte("SHIFT ")):
-						spl := bytes.Split(plaintext, []byte("\r\n"))
-						queue := bytes.ReplaceAll(spl[0], []byte("POP "), []byte(""))
-						fairyMQ.Queues[string(queue)] = fairyMQ.Queues[string(queue)][1:]
-						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+					case bytes.HasPrefix(plaintext, []byte("CLEAR")):
+						delete(fairyMQ.Queues, queue)
 						goto cont
-					case bytes.HasPrefix(plaintext, []byte("CLEAR ")):
+					case bytes.HasPrefix(plaintext, []byte("ENQUEUE")):
 						spl := bytes.Split(plaintext, []byte("\r\n"))
-						queue := bytes.ReplaceAll(spl[0], []byte("CLEAR "), []byte(""))
-						delete(fairyMQ.Queues, string(queue))
-						goto cont
-					case bytes.HasPrefix(plaintext, []byte("ENQUEUE ")):
-						spl := bytes.Split(plaintext, []byte("\r\n"))
-						queue := bytes.ReplaceAll(spl[0], []byte("ENQUEUE "), []byte(""))
 						timestamp, err := strconv.ParseInt(string(spl[1]), 10, 64)
 						if err != nil {
 							goto cont
 						}
-						fairyMQ.Queues[string(queue)] = append(fairyMQ.Queues[string(queue)], Message{
+						fairyMQ.Queues[queue] = append(fairyMQ.Queues[queue], Message{
 							Data:      spl[2],
 							Timestamp: time.UnixMicro(timestamp),
 						})
 
-						sort.Slice(fairyMQ.Queues[string(queue)], func(i, j int) bool {
-							return fairyMQ.Queues[string(queue)][i].Timestamp.After(fairyMQ.Queues[string(queue)][j].Timestamp)
+						sort.Slice(fairyMQ.Queues[queue], func(i, j int) bool {
+							return fairyMQ.Queues[queue][i].Timestamp.After(fairyMQ.Queues[queue][j].Timestamp)
 						})
 
 						fairyMQ.Conn.WriteToUDP([]byte("ACK\r\n"), addr)

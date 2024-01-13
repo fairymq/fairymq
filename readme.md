@@ -12,44 +12,45 @@ fairy will try all available keys to decrypt a message before failing.  Upon suc
 ```
 
 
-## Broker talk
+## Protocol
 ***************
 A simple language fairyMQ understands.  This is the language between a fairyMQ client and server.
 
 #### New message
 ``` 
-ENQUEUE queuename\r\n
-bytes..
+ENQUEUE\r\n
+timestamp\r\n
+..bytes
 ```
 
 #### First message in queue
 ``` 
-FIRST IN queuename;
+FIRST IN
 ```
 
 #### Last message in queue
 ``` 
-LAST IN queuename;
+LAST IN
 ```
 
 #### Length of queue
 ``` 
-LENGTH OF queuename;
+LENGTH
 ```
 
 #### Remove last message
 ``` 
-POP queuename;
+POP
 ```
 
 #### Remove first message
 ``` 
-SHIFT queuename;
+SHIFT
 ```
 
 #### Remove/Clear queue
 ``` 
-CLEAR queuename;
+CLEAR
 ```
 
 

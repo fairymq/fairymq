@@ -22,13 +22,17 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"net"
 	"os"
+	"path"
 	"sync"
 	"testing"
 )
 
 func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
+
 	type fields struct {
 		UDPAddr       *net.UDPAddr
 		Conn          *net.UDPConn
@@ -38,16 +42,18 @@ func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
 		ContextCancel context.CancelFunc
 		Context       context.Context
 	}
-	//type args struct {
-	//	queue string
-	//}
+	type args struct {
+		queue string
+	}
+
 	tests := []struct {
 		name    string
 		fields  fields
 		want    []byte
 		wantErr bool
+		args    args
 	}{
-		{name: "test", wantErr: false},
+		{name: "test", wantErr: false, args: args{queue: "test"}},
 	}
 
 	for _, tt := range tests {
@@ -61,9 +67,29 @@ func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
 				ContextCancel: tt.fields.ContextCancel,
 				Context:       tt.fields.Context,
 			}
-			if err := fairyMQ.GenerateQueueKeypair("test"); (err != nil) != tt.wantErr {
+			if err := fairyMQ.GenerateQueueKeypair(tt.args.queue); (err != nil) != tt.wantErr {
 				t.Errorf("GenerateQueueKeypair() error = %v, wantErr %v", err, tt.wantErr)
+			} else {
+
+				wd, err := os.Getwd()
+				if err != nil {
+					log.Println(err)
+				}
+
+				if _, err := os.Stat(path.Join(wd, fmt.Sprintf("keys/%s.private.pem", tt.args.queue))); err != nil {
+					t.Errorf("GenerateQueueKeypair() error = %v", err)
+				}
+
+				if _, err := os.Stat(path.Join(wd, fmt.Sprintf("keys/%s.public.pem", tt.args.queue))); err != nil {
+					t.Errorf("GenerateQueueKeypair() error = %v", err)
+				}
+
+				err = os.RemoveAll(path.Join(wd, fmt.Sprintf("keys")))
+				if err != nil {
+					t.Errorf("GenerateQueueKeypair() error = %v", err)
+				}
 			}
+
 		})
 	}
 }

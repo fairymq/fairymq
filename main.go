@@ -29,7 +29,6 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
-	"golang.org/x/exp/maps"
 	"log"
 	"net"
 	"os"
@@ -227,10 +226,6 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 					}
 
 					switch {
-					case bytes.HasPrefix(plaintext, []byte("QUEUES")):
-						queues := maps.Keys(fairyMQ.Queues)
-						fairyMQ.Conn.WriteToUDP(append([]byte(strings.Join(queues, ",")), []byte("\r\n")...), addr)
-						goto cont
 					case bytes.HasPrefix(plaintext, []byte("FIRST IN ")):
 						spl := bytes.Split(plaintext, []byte("\r\n"))
 						queue := bytes.ReplaceAll(spl[0], []byte("FIRST IN "), []byte(""))

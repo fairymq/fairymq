@@ -52,9 +52,5 @@ SHIFT queuename;
 CLEAR queuename;
 ```
 
-#### List queues
-``` 
-QUEUES;
-```
 
 

@@ -81,7 +81,7 @@ REM CONSUMER 0.0.0.0:5992
 ```
 HOST:PORT
 
-#### Remove Consumer
+#### List Consumers
 ``` 
 LIST CONSUMERS
 ```

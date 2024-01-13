@@ -105,12 +105,15 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 		Context       context.Context
 	}
 	tests := []struct {
-		name   string
-		fields fields
+		name    string
+		fields  fields
+		want    []byte
+		wantErr bool
 	}{
-		// todo
+		{name: "test", wantErr: false, fields: fields{Wg: &sync.WaitGroup{}, SignalChannel: make(chan os.Signal)}},
 	}
 	for _, tt := range tests {
+		var err error
 		t.Run(tt.name, func(t *testing.T) {
 			fairyMQ := &FairyMQ{
 				UDPAddr:       tt.fields.UDPAddr,
@@ -121,7 +124,31 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 				ContextCancel: tt.fields.ContextCancel,
 				Context:       tt.fields.Context,
 			}
-			fairyMQ.SignalListener()
+
+			fairyMQ.UDPAddr, err = net.ResolveUDPAddr("udp", "0.0.0.0:5991")
+			if err != nil {
+				t.Errorf("FairyMQ_SignalListener() error = %v", err)
+			}
+
+			// Start listening for UDP packages on the given address
+			fairyMQ.Conn, err = net.ListenUDP("udp", fairyMQ.UDPAddr)
+			if err != nil {
+				t.Errorf("FairyMQ_SignalListener() error = %v", err)
+			}
+
+			fairyMQ.Context, fairyMQ.ContextCancel = context.WithCancel(context.Background())
+
+			fairyMQ.Wg.Add(1)
+			go fairyMQ.SignalListener()
+
+			fairyMQ.Wg.Add(1)
+			go func() {
+				defer fairyMQ.Wg.Done()
+				tt.fields.SignalChannel <- os.Interrupt
+			}()
+
+			fairyMQ.Wg.Wait()
+
 		})
 	}
 }

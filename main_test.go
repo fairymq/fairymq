@@ -70,7 +70,7 @@ func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
 				Context:       tt.fields.Context,
 			}
 			if err := fairyMQ.GenerateQueueKeypair(tt.args.queue); (err != nil) != tt.wantErr {
-				t.Errorf("GenerateQueueKeypair() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v, wantErr %v", err, tt.wantErr)
 			} else {
 
 				wd, err := os.Getwd()
@@ -79,16 +79,16 @@ func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
 				}
 
 				if _, err := os.Stat(path.Join(wd, fmt.Sprintf("keys/%s.private.pem", tt.args.queue))); err != nil {
-					t.Errorf("GenerateQueueKeypair() error = %v", err)
+					t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v", err)
 				}
 
 				if _, err := os.Stat(path.Join(wd, fmt.Sprintf("keys/%s.public.pem", tt.args.queue))); err != nil {
-					t.Errorf("GenerateQueueKeypair() error = %v", err)
+					t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v", err)
 				}
 
 				err = os.RemoveAll(path.Join(wd, fmt.Sprintf("keys")))
 				if err != nil {
-					t.Errorf("GenerateQueueKeypair() error = %v", err)
+					t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v", err)
 				}
 			}
 
@@ -129,13 +129,13 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 
 			fairyMQ.UDPAddr, err = net.ResolveUDPAddr("udp", "0.0.0.0:5991")
 			if err != nil {
-				t.Errorf("FairyMQ_SignalListener() error = %v", err)
+				t.Errorf("TestFairyMQ_SignalListener() error = %v", err)
 			}
 
 			// Start listening for UDP packages on the given address
 			fairyMQ.Conn, err = net.ListenUDP("udp", fairyMQ.UDPAddr)
 			if err != nil {
-				t.Errorf("FairyMQ_SignalListener() error = %v", err)
+				t.Errorf("TestFairyMQ_SignalListener() error = %v", err)
 			}
 
 			fairyMQ.Context, fairyMQ.ContextCancel = context.WithCancel(context.Background())
@@ -195,28 +195,28 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 				defer fairyMQ.Wg.Done()
 				udpAddr, err := net.ResolveUDPAddr("udp", "0.0.0.0:5991")
 				if err != nil {
-					t.Errorf("FairyMQ_StartUDPListener() error = %v", err)
+					t.Errorf("TestFairyMQ_StartUDPListener() error = %v", err)
 				}
 
 				conn, err := net.DialUDP("udp", nil, udpAddr)
 				if err != nil {
-					t.Errorf("FairyMQ_StartUDPListener() error = %v", err)
+					t.Errorf("TestFairyMQ_StartUDPListener() error = %v", err)
 				}
 
 				_, err = conn.Write([]byte("testing, 1, 2, 3\n"))
 				if err != nil {
-					t.Errorf("FairyMQ_StartUDPListener() error = %v", err)
+					t.Errorf("TestFairyMQ_StartUDPListener() error = %v", err)
 				}
 
 				data, err := bufio.NewReader(conn).ReadString('\n')
 				if err != nil {
-					t.Errorf("FairyMQ_StartUDPListener() error = %v", err)
+					t.Errorf("TestFairyMQ_StartUDPListener() error = %v", err)
 				}
 
 				if strings.HasPrefix(data, "NACK") {
 					fairyMQ.ContextCancel()
 				} else {
-					t.Errorf("FairyMQ_StartUDPListener() error = incorrect response.  expecting NACK")
+					t.Errorf("TestFairyMQ_StartUDPListener() error = incorrect response.  expecting NACK")
 				}
 			}()
 

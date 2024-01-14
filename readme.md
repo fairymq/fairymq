@@ -12,6 +12,8 @@ fairyMQ is an open-source UDP based message queue software written in GO.  fairy
 
 ⭐ Snapshots to disk
 
+⭐ Recovery latest snapshot from disk
+
 ⭐ Messages marked with consumer(s) whom acknowledged
 
 ⭐ Message Expiry (delete expired messages from queue)

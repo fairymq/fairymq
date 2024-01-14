@@ -466,7 +466,7 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 							}
 						}
 
-						fairyMQ.Conn.WriteToUDP(append(bytes.Join(messages, []byte("\r\n\r\n")), []byte("\r\n")...), addr)
+						fairyMQ.Conn.WriteToUDP(append(bytes.Join(messages, []byte("\r\r")), []byte("\r\n")...), addr)
 
 					case bytes.HasPrefix(plaintext, []byte("EXP MSGS ")):
 						spl := bytes.Split(plaintext, []byte("EXP MSGS "))

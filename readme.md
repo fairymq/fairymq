@@ -210,7 +210,7 @@ Returns bytes with each item split with ``\r\n\r\n``
 
 i.e
 ``` 
-[12 32 45 232]\r\n\r\n
-[2 3 77 232]\r\n\r\n
+[12 32 45 232]\r\r
+[2 3 77 232]\r\r
 [12 32]\r\n
 ```

@@ -127,6 +127,13 @@ timestamp\r\n
 ..bytes
 ```
 
+With key
+``` 
+ENQUEUE somerandomkey\r\n
+timestamp\r\n
+..bytes
+```
+
 #### First message in queue
 ``` 
 FIRST IN

@@ -72,6 +72,7 @@ type Consumer struct {
 
 // Message is a queue message
 type Message struct {
+	Key                   string     // Message key default is empty but can be provided by client to be able to search
 	Data                  []byte     // Message data
 	Timestamp             time.Time  // Message timestamp
 	AcknowledgedConsumers []Consumer // Which consumers acknowledged this message? if any
@@ -468,6 +469,8 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 							fairyMQ.Queues[queue].ExpireMessages = false
 						}
 
+						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+
 					case bytes.HasPrefix(plaintext, []byte("EXP MSGS SEC ")):
 						spl := bytes.Split(plaintext, []byte("EXP MSGS SEC "))
 
@@ -483,6 +486,8 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 						}
 
 						fairyMQ.Queues[queue].ExpiryTime = uint(seconds)
+
+						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 
 					case bytes.HasPrefix(plaintext, []byte("FIRST IN")):
 						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue].Messages[0].Data, []byte("\r\n")...), addr)
@@ -548,7 +553,14 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf(strings.Join(consumers, ","))), []byte("\r\n")...), addr)
 						goto cont
-					case bytes.HasPrefix(plaintext, []byte("ENQUEUE")):
+					case bytes.HasPrefix(plaintext, []byte("ENQUEUE")) || bytes.HasPrefix(plaintext, []byte("ENQUEUE ")):
+						messageKey := "" // usually empty unless provided
+
+						if bytes.HasPrefix(plaintext, []byte("ENQUEUE ")) { // has key
+							spl := bytes.Split(plaintext, []byte("ENQUEUE "))
+							messageKey = string(bytes.Split(spl[1], []byte("\r\n"))[0]) // They are not unique
+						}
+
 						spl := bytes.Split(plaintext, []byte("\r\n"))
 						timestamp, err := strconv.ParseInt(string(spl[1]), 10, 64)
 						if err != nil {
@@ -557,6 +569,7 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 
 						message := Message{
 							Data:      spl[2],
+							Key:       messageKey,
 							Timestamp: time.UnixMicro(timestamp),
 						}
 

@@ -169,6 +169,8 @@ func (fairyMQ *FairyMQ) GenerateQueueKeypair(queue string) error {
 
 // SendToConsumers sends message to consumers of a queue
 func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte) {
+
+	log.Println(fairyMQ.Consumers)
 	for _, c := range fairyMQ.Consumers {
 		if c.Queue == queue {
 			attempts := 0 // Max attempts to reach server is 10
@@ -331,6 +333,16 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("NEW CONSUMER ")):
 						spl := bytes.Split(plaintext, []byte("NEW CONSUMER "))
+
+						for _, c := range fairyMQ.Consumers {
+							if c.Queue == queue {
+								if c.Address == strings.TrimSpace(string(spl[1])) {
+									fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+									goto cont
+								}
+							}
+						}
+
 						fairyMQ.Consumers = append(fairyMQ.Consumers, Consumer{
 							Queue:   queue,
 							Address: strings.TrimSpace(string(spl[1])),

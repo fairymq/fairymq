@@ -53,6 +53,7 @@ type FairyMQ struct {
 	Consumers     []Consumer         // Consumer
 	ContextCancel context.CancelFunc // To cancel on signal
 	Context       context.Context    // For signal cancellation
+	QueueMutexes  map[string]*sync.Mutex
 }
 
 // Queue is the fairyMQ queue structure
@@ -83,9 +84,10 @@ var (
 
 func main() {
 	fairyMQ = &FairyMQ{
-		Wg:            &sync.WaitGroup{},       // Setting waitgroup pointer to hold go routines
-		SignalChannel: make(chan os.Signal, 1), // Make signal channel
-		Queues:        make(map[string]*Queue), // Make queues in-memory hashmap
+		Wg:            &sync.WaitGroup{},            // Setting waitgroup pointer to hold go routines
+		SignalChannel: make(chan os.Signal, 1),      // Make signal channel
+		Queues:        make(map[string]*Queue),      // Make queues in-memory hashmap
+		QueueMutexes:  make(map[string]*sync.Mutex), // Make queue mutexes hashmap
 	} // Set fairyMQ global pointer
 
 	generateQueueKeypair := "" // If provided a new keypair will be created.
@@ -110,6 +112,9 @@ func main() {
 
 	fairyMQ.Wg.Add(1)
 	go fairyMQ.StartUDPListener() // Start UDP listener on default port 5991
+
+	fairyMQ.Wg.Add(1)
+	go fairyMQ.RemoveExpired()
 
 	fairyMQ.RecoverQueue()
 
@@ -178,6 +183,31 @@ func (fairyMQ *FairyMQ) GenerateQueueKeypair(queue string) error {
 	}
 
 	return nil
+}
+
+// RemoveExpired removes expired messages from queue if queue is configured to do so.
+func (fairyMQ *FairyMQ) RemoveExpired() {
+	defer fairyMQ.Wg.Done()
+
+	for {
+		if fairyMQ.Context.Err() != nil { // if signaled to shutdown
+			break
+		}
+
+		for j, q := range fairyMQ.Queues { // Loop over queues
+			if q.ExpireMessages { // Check if queue is configured to expire messages
+				for i := len(q.Messages) - 1; i >= 0; i-- { // Start from latest message
+					if q.Messages[i].Timestamp.Before(q.Messages[i].Timestamp.Add(time.Duration(q.ExpiryTime))) {
+						fairyMQ.QueueMutexes[j].Lock()
+						fairyMQ.Queues[j].Messages = fairyMQ.Queues[j].Messages[0:i] // Remove older than current
+						fairyMQ.QueueMutexes[j].Unlock()
+						log.Println("removed expired")
+					}
+				}
+			}
+		}
+		time.Sleep(time.Second * 2) // Every 2 seconds clean up expired from every queue
+	}
 }
 
 // SendToConsumers sends message to consumers of a queue
@@ -287,6 +317,11 @@ func (fairyMQ *FairyMQ) RecoverQueue() {
 		}
 		dataDecoder := gob.NewDecoder(snapshotFile)
 		err = dataDecoder.Decode(&fairyMQ.Queues)
+
+		for k, _ := range fairyMQ.Queues {
+			fairyMQ.QueueMutexes[k] = &sync.Mutex{}
+		}
+
 		log.Println("Recovered from snapshot")
 		break
 	}
@@ -311,7 +346,12 @@ func (fairyMQ *FairyMQ) Snapshot() {
 
 	// serialize the data
 	dataEncoder := gob.NewEncoder(snapshot)
-	dataEncoder.Encode(fairyMQ.Queues)
+
+	err = dataEncoder.Encode(fairyMQ.Queues)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
 }
 
 // StartUDPListener starts listening and handling UDP connections
@@ -392,6 +432,10 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 							Messages:       []Message{},
 							Consumers:      []string{},
 						}
+						_, ok = fairyMQ.QueueMutexes[queue]
+						if !ok {
+							fairyMQ.QueueMutexes[queue] = &sync.Mutex{}
+						}
 					}
 
 					switch {
@@ -441,15 +485,21 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("%d messages", len(fairyMQ.Queues[string(queue)].Messages))), []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("POP")):
+						fairyMQ.QueueMutexes[queue].Lock()
 						fairyMQ.Queues[queue].Messages = fairyMQ.Queues[queue].Messages[:len(fairyMQ.Queues[string(queue)].Messages)-1]
+						fairyMQ.QueueMutexes[queue].Unlock()
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("SHIFT")):
+						fairyMQ.QueueMutexes[queue].Lock()
 						fairyMQ.Queues[queue].Messages = fairyMQ.Queues[queue].Messages[1:]
+						fairyMQ.QueueMutexes[queue].Unlock()
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("CLEAR")):
+						fairyMQ.QueueMutexes[queue].Lock()
 						delete(fairyMQ.Queues, queue)
+						fairyMQ.QueueMutexes[queue].Unlock()
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("NEW CONSUMER ")):
@@ -501,13 +551,13 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 							Timestamp: time.UnixMicro(timestamp),
 						}
 
-						fairyMQ.Queues[queue].Messages = append(fairyMQ.Queues[queue].Messages, message)
-
 						go fairyMQ.SendToConsumers(queue, plaintext, &message)
-
+						fairyMQ.QueueMutexes[queue].Lock()
+						fairyMQ.Queues[queue].Messages = append(fairyMQ.Queues[queue].Messages, message)
 						sort.Slice(fairyMQ.Queues[queue].Messages, func(i, j int) bool {
 							return fairyMQ.Queues[queue].Messages[i].Timestamp.After(fairyMQ.Queues[queue].Messages[j].Timestamp)
 						})
+						fairyMQ.QueueMutexes[queue].Unlock()
 
 						fairyMQ.Conn.WriteToUDP([]byte("ACK\r\n"), addr)
 						goto cont

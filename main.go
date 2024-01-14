@@ -50,8 +50,9 @@ type FairyMQ struct {
 	SignalChannel chan os.Signal       // Signal channel
 	Queues        map[string][]Message // In-memory queues
 	Consumers     []Consumer           // Consumer
-	ContextCancel context.CancelFunc   // To cancel on signal
-	Context       context.Context      // For signal cancellation
+
+	ContextCancel context.CancelFunc // To cancel on signal
+	Context       context.Context    // For signal cancellation
 }
 
 // Consumer is a queue consumer
@@ -170,7 +171,6 @@ func (fairyMQ *FairyMQ) GenerateQueueKeypair(queue string) error {
 // SendToConsumers sends message to consumers of a queue
 func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte) {
 
-	log.Println(fairyMQ.Consumers)
 	for _, c := range fairyMQ.Consumers {
 		if c.Queue == queue {
 			attempts := 0 // Max attempts to reach server is 10

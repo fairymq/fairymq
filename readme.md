@@ -202,7 +202,7 @@ Setting to 4 hours in seconds
 EXP MSGS SEC 14400
 ```
 
-### GET MESSAGES WITH CERTAIN KEY
+#### GET MESSAGES WITH CERTAIN KEY
 ``` 
 MSGS WITH KEY banana
 ```

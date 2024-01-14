@@ -4,6 +4,23 @@
 fairyMQ is an open-source UDP based message queue software written in GO.  fairyMQ is in-memory, secure, extremely fast and super simple.
 
 
+### Features
+
+⭐ High throughput and low latency
+
+⭐ Secure with asymmetric cryptography 
+
+⭐ Snapshots to disk
+
+⭐ Messages marked with consumer(s) whom acknowledged
+
+⭐ Message Expiry (delete expired messages from queue)
+
+⭐ Multiple Queues
+
+⭐ Message data has no limit and are of a buffer of bytes enqueued by a client
+
+
 ## Setup
 **************
 fairyMQ expects a keypair per queue.  When sending messages to fairy the messages must be encrypted with the queues public key.

@@ -18,7 +18,7 @@ fairyMQ is an open-source UDP based message queue software written in GO.  fairy
 
 ⭐ Multiple Queues
 
-⭐ Message data has no limit and are of a buffer of bytes enqueued by a client
+⭐ Message data has no limit and are a buffer of bytes enqueued by a client
 
 
 ## Setup

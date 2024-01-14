@@ -395,6 +395,42 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 					}
 
 					switch {
+					case bytes.HasPrefix(plaintext, []byte("EXP MSGS ")):
+						spl := bytes.Split(plaintext, []byte("EXP MSGS "))
+
+						if len(spl) < 2 {
+							fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+							goto cont
+						}
+
+						boolI, err := strconv.Atoi(string(spl[1]))
+						if err != nil {
+							fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+							goto cont
+						}
+
+						if boolI > 0 {
+							fairyMQ.Queues[queue].ExpireMessages = true
+						} else {
+							fairyMQ.Queues[queue].ExpireMessages = false
+						}
+
+					case bytes.HasPrefix(plaintext, []byte("EXP MSGS SEC ")):
+						spl := bytes.Split(plaintext, []byte("EXP MSGS SEC "))
+
+						if len(spl) < 2 {
+							fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+							goto cont
+						}
+
+						seconds, err := strconv.Atoi(string(spl[1]))
+						if err != nil {
+							fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+							goto cont
+						}
+
+						fairyMQ.Queues[queue].ExpiryTime = uint(seconds)
+
 					case bytes.HasPrefix(plaintext, []byte("FIRST IN")):
 						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue].Messages[0].Data, []byte("\r\n")...), addr)
 						goto cont

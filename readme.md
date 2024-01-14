@@ -174,3 +174,21 @@ HOST:PORT
 LIST CONSUMERS
 ```
 
+#### EXPIRE MESSAGES
+
+Set true
+``` 
+EXP MSGS 1
+```
+
+Set false
+``` 
+EXP MSGS 0
+```
+
+#### EXPIRE MESSAGES SECONDS
+
+Setting to 4 hours in seconds
+``` 
+EXP MSGS SEC 14400
+```

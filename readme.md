@@ -20,6 +20,8 @@ fairyMQ is an open-source UDP based message queue software written in GO.  fairy
 
 ⭐ Multiple Queues
 
+⭐ Searching messages by key (Keys are not unique)
+
 ⭐ Message data has no limit and are a buffer of bytes enqueued by a client
 
 
@@ -198,4 +200,17 @@ EXP MSGS 0
 Setting to 4 hours in seconds
 ``` 
 EXP MSGS SEC 14400
+```
+
+### GET MESSAGES WITH CERTAIN KEY
+``` 
+MSGS WITH KEY banana
+```
+Returns bytes with each item split with ``\r\n\r\n``
+
+i.e
+``` 
+[12 32 45 232]\r\n\r\n
+[2 3 77 232]\r\n\r\n
+[12 32]\r\n
 ```

@@ -6,9 +6,9 @@ fairyMQ is an open-source UDP based message queue software written in GO.  fairy
 
 ### Features
 
-⭐ High throughput and low latency
+⭐ High throughput and low latency with reliable light weight UDP based protocol
 
-⭐ Secure with asymmetric cryptography 
+⭐ Transmission secure with asymmetric cryptography 
 
 ⭐ Snapshots to disk
 

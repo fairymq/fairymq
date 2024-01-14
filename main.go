@@ -177,7 +177,7 @@ func (fairyMQ *FairyMQ) GenerateQueueKeypair(queue string) error {
 }
 
 // SendToConsumers sends message to consumers of a queue
-func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte) {
+func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte, message *Message) {
 
 	for _, c := range fairyMQ.Consumers {
 		if c.Queue == queue {
@@ -229,7 +229,7 @@ func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte) {
 			}
 
 			// Read from consumer
-			_, err = bufio.NewReader(conn).ReadString('\n')
+			res, err := bufio.NewReader(conn).ReadString('\n')
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 					attempts += 1
@@ -242,6 +242,10 @@ func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte) {
 				} else {
 					continue
 				}
+			}
+
+			if strings.HasPrefix(res, "ACK") {
+				message.AcknowledgedConsumers = append(message.AcknowledgedConsumers, c)
 			}
 
 		}
@@ -393,12 +397,14 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 							goto cont
 						}
 
-						fairyMQ.Queues[queue].Messages = append(fairyMQ.Queues[queue].Messages, Message{
+						message := Message{
 							Data:      spl[2],
 							Timestamp: time.UnixMicro(timestamp),
-						})
+						}
 
-						go fairyMQ.SendToConsumers(queue, plaintext)
+						fairyMQ.Queues[queue].Messages = append(fairyMQ.Queues[queue].Messages, message)
+
+						go fairyMQ.SendToConsumers(queue, plaintext, &message)
 
 						sort.Slice(fairyMQ.Queues[queue].Messages, func(i, j int) bool {
 							return fairyMQ.Queues[queue].Messages[i].Timestamp.After(fairyMQ.Queues[queue].Messages[j].Timestamp)

@@ -206,7 +206,7 @@ EXP MSGS SEC 14400
 ``` 
 MSGS WITH KEY banana
 ```
-Returns bytes with each item split with ``\r\n\r\n``
+Returns bytes with each item split with ``\r\r``
 
 i.e
 ``` 

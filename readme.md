@@ -1,6 +1,5 @@
 <center>
     <img src="./images/fairymq.png" width="200" />
-
 </center>
 fairyMQ is an open-source UDP based message queue software written in GO.  fairyMQ is in-memory, secure, extremely fast and super simple.
 

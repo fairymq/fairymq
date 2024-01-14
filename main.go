@@ -44,15 +44,22 @@ import (
 
 // FairyMQ is the fairyMQ system structure
 type FairyMQ struct {
-	UDPAddr       *net.UDPAddr         // UDP address representation
-	Conn          *net.UDPConn         // Conn is the implementation of the Conn and PacketConn interfaces for UDP network connections
-	Wg            *sync.WaitGroup      // Waitgroup pointer
-	SignalChannel chan os.Signal       // Signal channel
-	Queues        map[string][]Message // In-memory queues
-	Consumers     []Consumer           // Consumer
-
+	UDPAddr       *net.UDPAddr       // UDP address representation
+	Conn          *net.UDPConn       // Conn is the implementation of the Conn and PacketConn interfaces for UDP network connections
+	Wg            *sync.WaitGroup    // Waitgroup pointer
+	SignalChannel chan os.Signal     // Signal channel
+	Queues        map[string]*Queue  // In-memory queues
+	Consumers     []Consumer         // Consumer
 	ContextCancel context.CancelFunc // To cancel on signal
 	Context       context.Context    // For signal cancellation
+}
+
+// Queue is the fairyMQ queue structure
+type Queue struct {
+	ExpireMessages bool      // Expire messages and delete from queue
+	ExpiryTime     uint      // Expiry in seconds; Default is 7200 (2 hours)
+	Messages       []Message // Queue messages
+	Consumers      []string  // Consumer addresses
 }
 
 // Consumer is a queue consumer
@@ -63,8 +70,9 @@ type Consumer struct {
 
 // Message is a queue message
 type Message struct {
-	Data      []byte    // Message data
-	Timestamp time.Time // Message timestamp
+	Data                  []byte     // Message data
+	Timestamp             time.Time  // Message timestamp
+	AcknowledgedConsumers []Consumer // Which consumers acknowledged this message? if any
 }
 
 // Global variables
@@ -74,9 +82,9 @@ var (
 
 func main() {
 	fairyMQ = &FairyMQ{
-		Wg:            &sync.WaitGroup{},          // Setting waitgroup pointer to hold go routines
-		SignalChannel: make(chan os.Signal, 1),    // Make signal channel
-		Queues:        make(map[string][]Message), // Make queues in-memory hashmap
+		Wg:            &sync.WaitGroup{},       // Setting waitgroup pointer to hold go routines
+		SignalChannel: make(chan os.Signal, 1), // Make signal channel
+		Queues:        make(map[string]*Queue), // Make queues in-memory hashmap
 	} // Set fairyMQ global pointer
 
 	generateQueueKeypair := "" // If provided a new keypair will be created.
@@ -309,22 +317,32 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 
 					queue := strings.Split(key.Name(), ".")[0]
 
+					_, ok := fairyMQ.Queues[queue]
+					if !ok {
+						fairyMQ.Queues[queue] = &Queue{
+							ExpireMessages: false,
+							ExpiryTime:     7200,
+							Messages:       []Message{},
+							Consumers:      []string{},
+						}
+					}
+
 					switch {
 					case bytes.HasPrefix(plaintext, []byte("FIRST IN")):
-						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue][0].Data, []byte("\r\n")...), addr)
+						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue].Messages[0].Data, []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("LAST IN")):
-						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue][len(fairyMQ.Queues[string(queue)])-1].Data, []byte("\r\n")...), addr)
+						fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue].Messages[len(fairyMQ.Queues[string(queue)].Messages)-1].Data, []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("LENGTH")):
-						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("%d messages", len(fairyMQ.Queues[string(queue)]))), []byte("\r\n")...), addr)
+						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("%d messages", len(fairyMQ.Queues[string(queue)].Messages))), []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("POP")):
-						fairyMQ.Queues[queue] = fairyMQ.Queues[queue][:len(fairyMQ.Queues[string(queue)])-1]
+						fairyMQ.Queues[queue].Messages = fairyMQ.Queues[queue].Messages[:len(fairyMQ.Queues[string(queue)].Messages)-1]
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("SHIFT")):
-						fairyMQ.Queues[queue] = fairyMQ.Queues[queue][1:]
+						fairyMQ.Queues[queue].Messages = fairyMQ.Queues[queue].Messages[1:]
 						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
 						goto cont
 					case bytes.HasPrefix(plaintext, []byte("CLEAR")):
@@ -375,15 +393,15 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 							goto cont
 						}
 
-						fairyMQ.Queues[queue] = append(fairyMQ.Queues[queue], Message{
+						fairyMQ.Queues[queue].Messages = append(fairyMQ.Queues[queue].Messages, Message{
 							Data:      spl[2],
 							Timestamp: time.UnixMicro(timestamp),
 						})
 
 						go fairyMQ.SendToConsumers(queue, plaintext)
 
-						sort.Slice(fairyMQ.Queues[queue], func(i, j int) bool {
-							return fairyMQ.Queues[queue][i].Timestamp.After(fairyMQ.Queues[queue][j].Timestamp)
+						sort.Slice(fairyMQ.Queues[queue].Messages, func(i, j int) bool {
+							return fairyMQ.Queues[queue].Messages[i].Timestamp.After(fairyMQ.Queues[queue].Messages[j].Timestamp)
 						})
 
 						fairyMQ.Conn.WriteToUDP([]byte("ACK\r\n"), addr)

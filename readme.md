@@ -22,7 +22,7 @@ fairy will try all available keys to decrypt a message before failing.  Upon suc
 ## Native Consumers
 **************
 - **GO** (coming soon)
-- **Node.JS** (coming soon)
+- **Node.JS** https://github.com/fairymq/fairymq-consumer-nodejs
 - **Java** (coming soon)
 - **Python** (coming soon)
 - **C#** (coming soon)

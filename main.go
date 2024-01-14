@@ -98,7 +98,7 @@ func main() {
 	if generateQueueKeypair != "" {
 		err := fairyMQ.GenerateQueueKeypair(generateQueueKeypair)
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Println(err.Error())
 			os.Exit(1)
 		}
 	}
@@ -114,9 +114,9 @@ func main() {
 	go fairyMQ.StartUDPListener() // Start UDP listener on default port 5991
 
 	fairyMQ.Wg.Add(1)
-	go fairyMQ.RemoveExpired()
+	go fairyMQ.RemoveExpired() // Start remove expired process
 
-	fairyMQ.RecoverQueue()
+	fairyMQ.RecoverQueues() // Recover persisted queues
 
 	fairyMQ.Wg.Wait() // Wait for all go routines
 
@@ -201,7 +201,6 @@ func (fairyMQ *FairyMQ) RemoveExpired() {
 						fairyMQ.QueueMutexes[j].Lock()
 						fairyMQ.Queues[j].Messages = fairyMQ.Queues[j].Messages[0:i] // Remove older than current
 						fairyMQ.QueueMutexes[j].Unlock()
-						log.Println("removed expired")
 					}
 				}
 			}
@@ -286,15 +285,17 @@ func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte, message *Mess
 	}
 }
 
-// RecoverQueue recovers latest persisted queue
-func (fairyMQ *FairyMQ) RecoverQueue() {
+// RecoverQueues recovers queues from latest snapshot
+func (fairyMQ *FairyMQ) RecoverQueues() {
 	if _, err := os.Stat("snapshots"); os.IsNotExist(err) {
 		return
 	}
 
 	snapshots, err := os.ReadDir("snapshots")
 	if err != nil {
-		log.Fatal(err)
+		log.Println("ERROR: ", err.Error())
+		fairyMQ.SignalChannel <- os.Interrupt
+		return
 	}
 
 	sort.Slice(snapshots, func(i, j int) bool {
@@ -312,11 +313,17 @@ func (fairyMQ *FairyMQ) RecoverQueue() {
 	for _, snapshot := range snapshots {
 		snapshotFile, err := os.Open(fmt.Sprintf("snapshots/%s", snapshot.Name()))
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			log.Println("ERROR: ", err.Error())
+			fairyMQ.SignalChannel <- os.Interrupt
+			return
 		}
 		dataDecoder := gob.NewDecoder(snapshotFile)
 		err = dataDecoder.Decode(&fairyMQ.Queues)
+		if err != nil {
+			log.Println("ERROR: ", err.Error())
+			fairyMQ.SignalChannel <- os.Interrupt
+			return
+		}
 
 		for k, _ := range fairyMQ.Queues {
 			fairyMQ.QueueMutexes[k] = &sync.Mutex{}
@@ -363,6 +370,7 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 	if err != nil {
 		log.Println("ERROR: ", err.Error())
 		fairyMQ.SignalChannel <- os.Interrupt
+		return
 	}
 
 	// Start listening for UDP packages on the given address
@@ -370,6 +378,7 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 	if err != nil {
 		log.Println("ERROR: ", err.Error())
 		fairyMQ.SignalChannel <- os.Interrupt
+		return
 	}
 
 	if _, err := os.Stat("./keys"); err != nil {

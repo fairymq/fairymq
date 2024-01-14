@@ -27,6 +27,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/gob"
 	"encoding/pem"
 	"flag"
 	"fmt"
@@ -102,13 +103,15 @@ func main() {
 
 	fairyMQ.Context, fairyMQ.ContextCancel = context.WithCancel(context.Background()) // Set core context to cancel on signal
 
-	signal.Notify(fairyMQ.SignalChannel, syscall.SIGINT, syscall.SIGTERM) // Populate signal channel on signal
+	signal.Notify(fairyMQ.SignalChannel, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGQUIT, syscall.SIGABRT) // Populate signal channel on signal
 
 	fairyMQ.Wg.Add(1)
 	go fairyMQ.SignalListener() // Start signal listener
 
 	fairyMQ.Wg.Add(1)
 	go fairyMQ.StartUDPListener() // Start UDP listener on default port 5991
+
+	fairyMQ.RecoverQueue()
 
 	fairyMQ.Wg.Wait() // Wait for all go routines
 
@@ -123,6 +126,7 @@ func (fairyMQ *FairyMQ) SignalListener() {
 			log.Println("received", sig)
 			fairyMQ.ContextCancel()
 			fairyMQ.Conn.Close()
+			fairyMQ.Snapshot()
 			return
 		default:
 			time.Sleep(time.Nanosecond * 10000)
@@ -252,6 +256,65 @@ func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte, message *Mess
 	}
 }
 
+// RecoverQueue recovers latest persisted queue
+func (fairyMQ *FairyMQ) RecoverQueue() {
+	if _, err := os.Stat("snapshots"); os.IsNotExist(err) {
+		return
+	}
+
+	snapshots, err := os.ReadDir("snapshots")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	sort.Slice(snapshots, func(i, j int) bool {
+		fileI, err := snapshots[i].Info()
+		if err != nil {
+			return false
+		}
+		fileJ, err := snapshots[j].Info()
+		if err != nil {
+			return false
+		}
+		return fileI.ModTime().After(fileJ.ModTime())
+	})
+
+	for _, snapshot := range snapshots {
+		snapshotFile, err := os.Open(fmt.Sprintf("snapshots/%s", snapshot.Name()))
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		dataDecoder := gob.NewDecoder(snapshotFile)
+		err = dataDecoder.Decode(&fairyMQ.Queues)
+		log.Println("Recovered from snapshot")
+		break
+	}
+
+}
+
+// Snapshot takes a snapshot of current queue
+func (fairyMQ *FairyMQ) Snapshot() {
+	if _, err := os.Stat("snapshots"); os.IsNotExist(err) {
+		err := os.Mkdir("snapshots", 0777)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+			return
+		}
+	}
+
+	snapshot, err := os.Create(fmt.Sprintf("snapshots/queue.%d.snapshot", time.Now().Unix()))
+	if err != nil {
+		log.Println("ERROR:", err.Error())
+		return
+	}
+
+	// serialize the data
+	dataEncoder := gob.NewEncoder(snapshot)
+	dataEncoder.Encode(fairyMQ.Queues)
+}
+
+// StartUDPListener starts listening and handling UDP connections
 func (fairyMQ *FairyMQ) StartUDPListener() {
 	defer fairyMQ.Wg.Done()
 	var err error

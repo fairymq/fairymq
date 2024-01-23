@@ -34,13 +34,12 @@ import (
 )
 
 func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
-
 	type fields struct {
 		UDPAddr       *net.UDPAddr
 		Conn          *net.UDPConn
 		Wg            *sync.WaitGroup
 		SignalChannel chan os.Signal
-		Queues        map[string][]Message
+		Queues        map[string]*Queue
 		ContextCancel context.CancelFunc
 		Context       context.Context
 	}
@@ -72,7 +71,6 @@ func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
 			if err := fairyMQ.GenerateQueueKeypair(tt.args.queue); (err != nil) != tt.wantErr {
 				t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v, wantErr %v", err, tt.wantErr)
 			} else {
-
 				wd, err := os.Getwd()
 				if err != nil {
 					log.Println(err)
@@ -91,7 +89,6 @@ func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
 					t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v", err)
 				}
 			}
-
 		})
 	}
 }
@@ -102,7 +99,7 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 		Conn          *net.UDPConn
 		Wg            *sync.WaitGroup
 		SignalChannel chan os.Signal
-		Queues        map[string][]Message
+		Queues        map[string]*Queue
 		ContextCancel context.CancelFunc
 		Context       context.Context
 	}
@@ -150,7 +147,6 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 			}()
 
 			fairyMQ.Wg.Wait()
-
 		})
 	}
 }
@@ -161,7 +157,7 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 		Conn          *net.UDPConn
 		Wg            *sync.WaitGroup
 		SignalChannel chan os.Signal
-		Queues        map[string][]Message
+		Queues        map[string]*Queue
 		ContextCancel context.CancelFunc
 		Context       context.Context
 	}
@@ -221,7 +217,6 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 			}()
 
 			fairyMQ.Wg.Wait()
-
 		})
 	}
 }

@@ -120,7 +120,6 @@ func main() {
 	fairyMQ.RecoverQueues() // Recover persisted queues
 
 	fairyMQ.Wg.Wait() // Wait for all go routines
-
 }
 
 // SignalListener listens for system signals and gracefully shutsdown
@@ -212,7 +211,6 @@ func (fairyMQ *FairyMQ) RemoveExpired() {
 
 // SendToConsumers sends message to consumers of a queue
 func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte, message *Message) {
-
 	for _, c := range fairyMQ.Consumers {
 		if c.Queue == queue {
 			attempts := 0 // Max attempts to reach server is 10
@@ -281,7 +279,6 @@ func (fairyMQ *FairyMQ) SendToConsumers(queue string, data []byte, message *Mess
 			if strings.HasPrefix(res, "ACK") {
 				message.AcknowledgedConsumers = append(message.AcknowledgedConsumers, c)
 			}
-
 		}
 	}
 }
@@ -326,14 +323,13 @@ func (fairyMQ *FairyMQ) RecoverQueues() {
 			return
 		}
 
-		for k, _ := range fairyMQ.Queues {
+		for k := range fairyMQ.Queues {
 			fairyMQ.QueueMutexes[k] = &sync.Mutex{}
 		}
 
 		log.Println("Recovered from snapshot")
 		break
 	}
-
 }
 
 // Snapshot takes a snapshot of current queue
@@ -416,7 +412,6 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 
 		for _, key := range keys {
 			if !key.IsDir() {
-
 				if strings.HasSuffix(key.Name(), "private.pem") {
 					privateKeyPEM, err := os.ReadFile("keys/" + key.Name())
 					if err != nil {
@@ -620,7 +615,6 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 					}
 				}
 			}
-
 		}
 
 		fairyMQ.Conn.WriteToUDP([]byte("NACK\r\n"), addr)
@@ -630,6 +624,5 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 
 	nack:
 		fairyMQ.Conn.WriteToUDP([]byte("NACK\r\n"), addr)
-
 	}
 }

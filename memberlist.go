@@ -6,9 +6,9 @@ import (
 
 func (fairyMQ *FairyMQ) SetupMemberListCluster() error {
 	config := memberlist.DefaultLocalConfig()
-	// TODO: Setup Delegate
+	config.BindAddr = fairyMQ.config.BindAddress
+	config.BindPort = int(fairyMQ.config.MemberlistPort)
 	config.Delegate = &Delegate{}
-	// TODO: Setup EventDelegate
 	config.Events = &EventDelegate{}
 
 	list, err := memberlist.Create(config)
@@ -16,10 +16,8 @@ func (fairyMQ *FairyMQ) SetupMemberListCluster() error {
 		return err
 	}
 
-	// If JoinAddr is provided, then join the cluster
-	// TODO: Replace this with check for JoinAddr in config
-	if true {
-		_, err := list.Join([]string{"JoinAddr here"})
+	if len(fairyMQ.config.JoinAddresses) > 0 {
+		_, err = list.Join(fairyMQ.config.JoinAddresses)
 		if err != nil {
 			return err
 		}

@@ -3,13 +3,11 @@ package main
 import (
 	"fmt"
 	"github.com/hashicorp/memberlist"
-	"math/rand"
 )
 
 func (fairyMQ *FairyMQ) SetupMemberListCluster() error {
 	config := memberlist.DefaultWANConfig()
-	// TODO: Set a sensible unique name for this node
-	config.Name = fmt.Sprintf("%d", rand.Int())
+	config.Name = fmt.Sprintf("%s:%d", fairyMQ.config.BindAddress, fairyMQ.config.MemberlistPort)
 	config.BindAddr = fairyMQ.config.BindAddress
 	config.BindPort = int(fairyMQ.config.MemberlistPort)
 	config.AdvertisePort = int(fairyMQ.config.MemberlistPort)

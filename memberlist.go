@@ -8,6 +8,7 @@ func (fairyMQ *FairyMQ) SetupMemberListCluster() error {
 	config := memberlist.DefaultLocalConfig()
 	config.BindAddr = fairyMQ.config.BindAddress
 	config.BindPort = int(fairyMQ.config.MemberlistPort)
+	config.AdvertisePort = int(fairyMQ.config.MemberlistPort)
 	config.Delegate = &Delegate{}
 	config.Events = &EventDelegate{}
 

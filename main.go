@@ -103,6 +103,11 @@ func main() {
 		}
 	}
 
+	if err := fairyMQ.SetupMemberListCluster(); err != nil {
+		log.Println(err.Error())
+		os.Exit(1)
+	}
+
 	fairyMQ.Context, fairyMQ.ContextCancel = context.WithCancel(context.Background()) // Set core context to cancel on signal
 
 	signal.Notify(fairyMQ.SignalChannel, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGQUIT, syscall.SIGABRT) // Populate signal channel on signal

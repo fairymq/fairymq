@@ -2,8 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"net"
 )
 
 type Config struct {
@@ -20,9 +18,6 @@ func GetConfig() Config {
 		"join-address",
 		"IP address and memberlist port of a peer in a cluster we would like to join. This flag can be specified multiple times.   --join-address=<ipaddress>:<memberlist-port>",
 		func(address string) error {
-			if net.ParseIP(address) == nil {
-				return fmt.Errorf("invalid ip address: %s", address)
-			}
 			joinAddresses = append(joinAddresses, address)
 			return nil
 		})

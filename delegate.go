@@ -3,8 +3,9 @@ package main
 type Delegate struct{}
 
 func (delegate *Delegate) NodeMeta(limit int) []byte {
+	mb := make([]byte, limit)
 	// TODO: Return the meta for this current node
-	return []byte{}
+	return mb
 }
 
 func (delegate *Delegate) NotifyMsg([]byte) {

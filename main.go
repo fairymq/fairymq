@@ -194,7 +194,7 @@ func (fairyMQ *FairyMQ) RemoveExpired() {
 	defer fairyMQ.Wg.Done()
 
 	for {
-		if fairyMQ.Context.Err() != nil { // if signaled to shutdown
+		if fairyMQ.Context.Err() != nil { // if signaled to shut down
 			break
 		}
 
@@ -400,7 +400,7 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 		n, addr, err := fairyMQ.Conn.ReadFromUDP(buf[0:])
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				if fairyMQ.Context.Err() != nil { // if signaled to shutdown
+				if fairyMQ.Context.Err() != nil { // if signaled to shut down
 					break
 				}
 				continue

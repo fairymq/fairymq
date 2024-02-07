@@ -11,9 +11,12 @@ func (fairyMQ *FairyMQ) SetupMemberListCluster() error {
 	config.BindAddr = fairyMQ.config.BindAddress
 	config.BindPort = int(fairyMQ.config.MemberlistPort)
 	config.AdvertisePort = int(fairyMQ.config.MemberlistPort)
-	config.Delegate = &Delegate{}
+	config.Delegate = &Delegate{
+		fairyMQ: fairyMQ,
+	}
 
 	list, err := memberlist.Create(config)
+
 	if err != nil {
 		return err
 	}

@@ -110,6 +110,16 @@ func (delegate *Delegate) MergeRemoteState(buf []byte, join bool) {
 			}
 		}
 		// Sort the messages by timestamp
+		slices.SortFunc(fairyMQ.Queues[q.Name].Messages, func(a, b Message) int {
+			switch {
+			case a.Timestamp.Before(b.Timestamp):
+				return -1
+			case a.Timestamp.After(b.Timestamp):
+				return 1
+			default:
+				return 0
+			}
+		})
 		mut.Unlock()
 	}
 }

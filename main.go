@@ -92,14 +92,16 @@ func main() {
 		config:        GetConfig(),
 	} // Set fairyMQ global pointer
 
-	generateQueueKeypair := fairyMQ.config.GenerateQueueKeyPair
+	generateQueueKeyPairs := fairyMQ.config.GenerateQueueKeyPairs
 
 	// If queue provided generate a new keypair
-	if generateQueueKeypair != "" {
-		err := fairyMQ.GenerateQueueKeypair(generateQueueKeypair)
-		if err != nil {
-			log.Println(err.Error())
-			os.Exit(1)
+	if len(generateQueueKeyPairs) > 0 {
+		for _, queue := range generateQueueKeyPairs {
+			err := fairyMQ.GenerateQueueKeypair(queue)
+			if err != nil {
+				log.Println(err.Error())
+				os.Exit(1)
+			}
 		}
 	}
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"slices"
+	"sync"
 	"time"
 )
 
@@ -45,10 +46,22 @@ func (delegate *Delegate) LocalState(join bool) []byte {
 
 	for queueName, mut := range fairyMQ.QueueMutexes {
 		mut.Lock()
+
+		// Extract messages from queue
+		var messages []SyncMessage
+		for _, m := range fairyMQ.Queues[queueName].Messages {
+			messages = append(messages, SyncMessage{
+				Key:       m.Key,
+				Data:      m.Data,
+				Timestamp: m.Timestamp,
+			})
+		}
+
 		queues = append(queues, SyncQueue{
 			Name:           queueName,
 			ExpireMessages: fairyMQ.Queues[queueName].ExpireMessages,
 			ExpiryTime:     fairyMQ.Queues[queueName].ExpiryTime,
+			Messages:       messages,
 		})
 		mut.Unlock()
 	}
@@ -84,12 +97,18 @@ func (delegate *Delegate) MergeRemoteState(buf []byte, join bool) {
 					AcknowledgedConsumers: []Consumer{},
 				})
 			}
+
+			fairyMQ.QueueMutexes[q.Name] = &sync.Mutex{}
+			fairyMQ.QueueMutexes[q.Name].Lock()
+
 			fairyMQ.Queues[q.Name] = &Queue{
 				ExpireMessages: q.ExpireMessages,
 				ExpiryTime:     q.ExpiryTime,
 				Messages:       messages,
 				Consumers:      []string{},
 			}
+
+			fairyMQ.QueueMutexes[q.Name].Unlock()
 			continue
 		}
 
@@ -113,9 +132,9 @@ func (delegate *Delegate) MergeRemoteState(buf []byte, join bool) {
 		slices.SortFunc(fairyMQ.Queues[q.Name].Messages, func(a, b Message) int {
 			switch {
 			case a.Timestamp.Before(b.Timestamp):
-				return -1
-			case a.Timestamp.After(b.Timestamp):
 				return 1
+			case a.Timestamp.After(b.Timestamp):
+				return -1
 			default:
 				return 0
 			}

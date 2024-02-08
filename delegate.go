@@ -35,9 +35,9 @@ type Delegate struct {
 
 func (delegate *Delegate) NodeMeta(limit int) []byte {
 	meta := NodeMeta{
-		Name:           fmt.Sprintf("%s:%d", delegate.fairyMQ.config.BindAddress, delegate.fairyMQ.config.MemberlistPort),
-		BindAddress:    delegate.fairyMQ.config.BindAddress,
-		MemberlistPort: delegate.fairyMQ.config.MemberlistPort,
+		Name:           fmt.Sprintf("%s:%d", delegate.fairyMQ.Config.BindAddress, delegate.fairyMQ.Config.MemberlistPort),
+		BindAddress:    delegate.fairyMQ.Config.BindAddress,
+		MemberlistPort: delegate.fairyMQ.Config.MemberlistPort,
 	}
 	mb := make([]byte, limit)
 	mb, err := json.Marshal(meta)

@@ -3,15 +3,16 @@ package main
 import (
 	"fmt"
 	"github.com/hashicorp/memberlist"
+	"time"
 )
 
-func (fairyMQ *FairyMQ) SetupMemberListCluster() error {
+func (fairyMQ *FairyMQ) SetupMemberListCluster() (func() error, error) {
 	config := memberlist.DefaultWANConfig()
-	config.Name = fmt.Sprintf("%s:%d", fairyMQ.config.BindAddress, fairyMQ.config.MemberlistPort)
+	config.Name = fmt.Sprintf("%s:%d", fairyMQ.Config.BindAddress, fairyMQ.Config.MemberlistPort)
 	config.ProtocolVersion = memberlist.ProtocolVersionMax
-	config.BindAddr = fairyMQ.config.BindAddress
-	config.BindPort = int(fairyMQ.config.MemberlistPort)
-	config.AdvertisePort = int(fairyMQ.config.MemberlistPort)
+	config.BindAddr = fairyMQ.Config.BindAddress
+	config.BindPort = int(fairyMQ.Config.MemberlistPort)
+	config.AdvertisePort = int(fairyMQ.Config.MemberlistPort)
 	config.EnableCompression = true
 	config.Delegate = &Delegate{
 		fairyMQ: fairyMQ,
@@ -20,15 +21,25 @@ func (fairyMQ *FairyMQ) SetupMemberListCluster() error {
 	list, err := memberlist.Create(config)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if len(fairyMQ.config.JoinAddresses) > 0 {
-		_, err = list.Join(fairyMQ.config.JoinAddresses)
+	if len(fairyMQ.Config.JoinAddresses) > 0 {
+		_, err = list.Join(fairyMQ.Config.JoinAddresses)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
+	shutdownFunc := func() error {
+		if err := list.Leave(200 * time.Millisecond); err != nil {
+			return fmt.Errorf("memberlist shutdown - leave: %+v", err)
+		}
+		if err = list.Shutdown(); err != nil {
+			return fmt.Errorf("memberlist shutdown - shutdown: %+v", err)
+		}
+		return nil
+	}
+
+	return shutdownFunc, nil
 }

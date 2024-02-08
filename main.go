@@ -44,16 +44,17 @@ import (
 
 // FairyMQ is the fairyMQ system structure
 type FairyMQ struct {
-	UDPAddr       *net.UDPAddr           // UDP address representation
-	Conn          *net.UDPConn           // Conn is the implementation of the Conn and PacketConn interfaces for UDP network connections
-	Wg            *sync.WaitGroup        // WaitGroup pointer
-	SignalChannel chan os.Signal         // Signal channel
-	Queues        map[string]*Queue      // In-memory queues
-	Consumers     []Consumer             // Consumer
-	ContextCancel context.CancelFunc     // To cancel on signal
-	Context       context.Context        // For signal cancellation
-	QueueMutexes  map[string]*sync.Mutex // Individual queue mutexes
-	config        Config                 // Server configuration
+	UDPAddr                *net.UDPAddr           // UDP address representation
+	Conn                   *net.UDPConn           // Conn is the implementation of the Conn and PacketConn interfaces for UDP network connections
+	Wg                     *sync.WaitGroup        // WaitGroup pointer
+	SignalChannel          chan os.Signal         // Signal channel
+	Queues                 map[string]*Queue      // In-memory queues
+	Consumers              []Consumer             // Consumer
+	ContextCancel          context.CancelFunc     // To cancel on signal
+	Context                context.Context        // For signal cancellation
+	QueueMutexes           map[string]*sync.Mutex // Individual queue mutexes
+	Config                 Config                 // Server configuration
+	MemberlistShutdownFunc func() error           // Function called when withdrawing memberlist cluster membership
 }
 
 // Queue is the fairyMQ queue structure
@@ -89,10 +90,10 @@ func main() {
 		SignalChannel: make(chan os.Signal, 1),      // Make signal channel
 		Queues:        make(map[string]*Queue),      // Make queues in-memory hashmap
 		QueueMutexes:  make(map[string]*sync.Mutex), // Make queue mutexes hashmap
-		config:        GetConfig(),
+		Config:        GetConfig(),
 	} // Set fairyMQ global pointer
 
-	generateQueueKeyPairs := fairyMQ.config.GenerateQueueKeyPairs
+	generateQueueKeyPairs := fairyMQ.Config.GenerateQueueKeyPairs
 
 	// If queue provided generate a new keypair
 	if len(generateQueueKeyPairs) > 0 {
@@ -105,7 +106,9 @@ func main() {
 		}
 	}
 
-	if err := fairyMQ.SetupMemberListCluster(); err != nil {
+	var err error
+	fairyMQ.MemberlistShutdownFunc, err = fairyMQ.SetupMemberListCluster()
+	if err != nil {
 		log.Println(err.Error())
 		os.Exit(1)
 	}
@@ -128,7 +131,7 @@ func main() {
 	fairyMQ.Wg.Wait() // Wait for all go routines
 }
 
-// SignalListener listens for system signals and gracefully shutsdown
+// SignalListener listens for system signals and gracefully shuts down
 func (fairyMQ *FairyMQ) SignalListener() {
 	defer fairyMQ.Wg.Done()
 	for {
@@ -136,8 +139,13 @@ func (fairyMQ *FairyMQ) SignalListener() {
 		case sig := <-fairyMQ.SignalChannel:
 			log.Println("received", sig)
 			fairyMQ.ContextCancel()
-			fairyMQ.Conn.Close()
+			if err := fairyMQ.Conn.Close(); err != nil {
+				log.Println(err)
+			}
 			fairyMQ.Snapshot()
+			if err := fairyMQ.MemberlistShutdownFunc(); err != nil {
+				log.Println(err)
+			}
 			return
 		default:
 			time.Sleep(time.Nanosecond * 10000)
@@ -369,7 +377,7 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 	defer fairyMQ.Wg.Done()
 	var err error
 
-	fairyMQ.UDPAddr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", fairyMQ.config.BindAddress, fairyMQ.config.BindPort))
+	fairyMQ.UDPAddr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", fairyMQ.Config.BindAddress, fairyMQ.Config.BindPort))
 	if err != nil {
 		log.Println("ERROR: ", err.Error())
 		fairyMQ.SignalChannel <- os.Interrupt

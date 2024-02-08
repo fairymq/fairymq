@@ -90,7 +90,7 @@ func main() {
 		SignalChannel: make(chan os.Signal, 1),      // Make signal channel
 		Queues:        make(map[string]*Queue),      // Make queues in-memory hashmap
 		QueueMutexes:  make(map[string]*sync.Mutex), // Make queue mutexes hashmap
-		Config:        GetConfig(),
+		Config:        GetConfig(),                  // Calling GetConfig
 	} // Set fairyMQ global pointer
 
 	generateQueueKeyPairs := fairyMQ.Config.GenerateQueueKeyPairs

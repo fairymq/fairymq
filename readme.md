@@ -50,6 +50,43 @@ fairy will try all available keys to decrypt a message before failing.  Upon suc
 - **Python** (coming soon)
 - **C#** (coming soon)
 
+## How to use
+**************
+To start download or build fairyMQ.
+
+Once downloaded or built you can start fairyMQ but mind you fairy requires an initial keypair so we can generate that with flag ``--generate-queue-key-pair=YOURQUEUENAME``
+```
+./fairyMQ &
+```
+Above runs fairy.
+
+To generate a new queue keypair
+```
+./fairyMQ --generate-queue-key-pair=YOURQUEUENAME
+```
+
+Above will allow enqueues with a public key into an in-memory queue.  There can be multiple.
+
+### Distribution
+If you want to sync multiple nodes data you can use:
+```
+--join-address
+```
+Above is the IP address and memberlist port of a peer in a cluster we would like to join
+
+Is the frequency in-which nodes synchronize
+```
+--push-pull-interval
+```
+
+Port used to communicate with other nodes
+```
+memberlist-port
+```
+
+
+fairyMQ is a *distributed* message queue meaning we can start 1 or many external nodes.  These nodes sync all queues.
+
 ## Building
 ***************
 Building

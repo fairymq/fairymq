@@ -8,9 +8,11 @@ import (
 func (fairyMQ *FairyMQ) SetupMemberListCluster() error {
 	config := memberlist.DefaultWANConfig()
 	config.Name = fmt.Sprintf("%s:%d", fairyMQ.config.BindAddress, fairyMQ.config.MemberlistPort)
+	config.ProtocolVersion = memberlist.ProtocolVersionMax
 	config.BindAddr = fairyMQ.config.BindAddress
 	config.BindPort = int(fairyMQ.config.MemberlistPort)
 	config.AdvertisePort = int(fairyMQ.config.MemberlistPort)
+	config.EnableCompression = true
 	config.Delegate = &Delegate{
 		fairyMQ: fairyMQ,
 	}

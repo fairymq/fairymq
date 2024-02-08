@@ -137,6 +137,8 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 
 			fairyMQ.Context, fairyMQ.ContextCancel = context.WithCancel(context.Background())
 
+			fairyMQ.MemberlistShutdownFunc = func() error { return nil }
+
 			fairyMQ.Wg.Add(1)
 			go fairyMQ.SignalListener()
 
@@ -185,6 +187,8 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 			go fairyMQ.StartUDPListener()
 
 			fairyMQ.Context, fairyMQ.ContextCancel = context.WithCancel(context.Background())
+
+			fairyMQ.MemberlistShutdownFunc = func() error { return nil }
 
 			fairyMQ.Wg.Add(1)
 			go func() {

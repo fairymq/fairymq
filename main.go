@@ -103,7 +103,7 @@ func main() {
 				log.Println(err.Error())
 				os.Exit(1)
 			}
-			// TODO: Log key generation success
+			log.Printf("Successfully generated key: %s", queue)
 		}
 	}
 

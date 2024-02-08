@@ -35,13 +35,15 @@ import (
 
 func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
 	type fields struct {
-		UDPAddr       *net.UDPAddr
-		Conn          *net.UDPConn
-		Wg            *sync.WaitGroup
-		SignalChannel chan os.Signal
-		Queues        map[string]*Queue
-		ContextCancel context.CancelFunc
-		Context       context.Context
+		UDPAddr                *net.UDPAddr
+		Conn                   *net.UDPConn
+		Wg                     *sync.WaitGroup
+		SignalChannel          chan os.Signal
+		Queues                 map[string]*Queue
+		ContextCancel          context.CancelFunc
+		Context                context.Context
+		Config                 Config
+		MemberlistShutdownFunc func() error
 	}
 	type args struct {
 		queue string
@@ -60,13 +62,15 @@ func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fairyMQ := &FairyMQ{
-				UDPAddr:       tt.fields.UDPAddr,
-				Conn:          tt.fields.Conn,
-				Wg:            tt.fields.Wg,
-				SignalChannel: tt.fields.SignalChannel,
-				Queues:        tt.fields.Queues,
-				ContextCancel: tt.fields.ContextCancel,
-				Context:       tt.fields.Context,
+				UDPAddr:                tt.fields.UDPAddr,
+				Conn:                   tt.fields.Conn,
+				Wg:                     tt.fields.Wg,
+				SignalChannel:          tt.fields.SignalChannel,
+				Queues:                 tt.fields.Queues,
+				ContextCancel:          tt.fields.ContextCancel,
+				Context:                tt.fields.Context,
+				Config:                 tt.fields.Config,
+				MemberlistShutdownFunc: tt.fields.MemberlistShutdownFunc,
 			}
 			if err := fairyMQ.GenerateQueueKeypair(tt.args.queue); (err != nil) != tt.wantErr {
 				t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v, wantErr %v", err, tt.wantErr)
@@ -95,13 +99,15 @@ func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
 
 func TestFairyMQ_SignalListener(t *testing.T) {
 	type fields struct {
-		UDPAddr       *net.UDPAddr
-		Conn          *net.UDPConn
-		Wg            *sync.WaitGroup
-		SignalChannel chan os.Signal
-		Queues        map[string]*Queue
-		ContextCancel context.CancelFunc
-		Context       context.Context
+		UDPAddr                *net.UDPAddr
+		Conn                   *net.UDPConn
+		Wg                     *sync.WaitGroup
+		SignalChannel          chan os.Signal
+		Queues                 map[string]*Queue
+		ContextCancel          context.CancelFunc
+		Context                context.Context
+		Config                 Config
+		MemberlistShutdownFunc func() error
 	}
 	tests := []struct {
 		name    string
@@ -109,19 +115,29 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 		want    []byte
 		wantErr bool
 	}{
-		{name: "test", wantErr: false, fields: fields{Wg: &sync.WaitGroup{}, SignalChannel: make(chan os.Signal)}},
+		{
+			name:    "test",
+			wantErr: false,
+			fields: fields{
+				Wg:                     &sync.WaitGroup{},
+				SignalChannel:          make(chan os.Signal),
+				MemberlistShutdownFunc: func() error { return nil },
+			},
+		},
 	}
 	for _, tt := range tests {
 		var err error
 		t.Run(tt.name, func(t *testing.T) {
 			fairyMQ := &FairyMQ{
-				UDPAddr:       tt.fields.UDPAddr,
-				Conn:          tt.fields.Conn,
-				Wg:            tt.fields.Wg,
-				SignalChannel: tt.fields.SignalChannel,
-				Queues:        tt.fields.Queues,
-				ContextCancel: tt.fields.ContextCancel,
-				Context:       tt.fields.Context,
+				UDPAddr:                tt.fields.UDPAddr,
+				Conn:                   tt.fields.Conn,
+				Wg:                     tt.fields.Wg,
+				SignalChannel:          tt.fields.SignalChannel,
+				Queues:                 tt.fields.Queues,
+				ContextCancel:          tt.fields.ContextCancel,
+				Context:                tt.fields.Context,
+				Config:                 tt.fields.Config,
+				MemberlistShutdownFunc: tt.fields.MemberlistShutdownFunc,
 			}
 
 			fairyMQ.UDPAddr, err = net.ResolveUDPAddr("udp", "0.0.0.0:5991")
@@ -153,13 +169,15 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 
 func TestFairyMQ_StartUDPListener(t *testing.T) {
 	type fields struct {
-		UDPAddr       *net.UDPAddr
-		Conn          *net.UDPConn
-		Wg            *sync.WaitGroup
-		SignalChannel chan os.Signal
-		Queues        map[string]*Queue
-		ContextCancel context.CancelFunc
-		Context       context.Context
+		UDPAddr                *net.UDPAddr
+		Conn                   *net.UDPConn
+		Wg                     *sync.WaitGroup
+		SignalChannel          chan os.Signal
+		Queues                 map[string]*Queue
+		ContextCancel          context.CancelFunc
+		Context                context.Context
+		Config                 Config
+		MemberlistShutdownFunc func() error
 	}
 	tests := []struct {
 		name    string
@@ -167,18 +185,32 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 		want    []byte
 		wantErr bool
 	}{
-		{name: "test", wantErr: false, fields: fields{Wg: &sync.WaitGroup{}, SignalChannel: make(chan os.Signal)}},
+		{
+			name:    "test",
+			wantErr: false,
+			fields: fields{
+				Wg:            &sync.WaitGroup{},
+				SignalChannel: make(chan os.Signal),
+				Config: Config{
+					BindAddress: "0.0.0.0",
+					BindPort:    5991,
+				},
+				MemberlistShutdownFunc: func() error { return nil },
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fairyMQ := &FairyMQ{
-				UDPAddr:       tt.fields.UDPAddr,
-				Conn:          tt.fields.Conn,
-				Wg:            tt.fields.Wg,
-				SignalChannel: tt.fields.SignalChannel,
-				Queues:        tt.fields.Queues,
-				ContextCancel: tt.fields.ContextCancel,
-				Context:       tt.fields.Context,
+				UDPAddr:                tt.fields.UDPAddr,
+				Conn:                   tt.fields.Conn,
+				Wg:                     tt.fields.Wg,
+				SignalChannel:          tt.fields.SignalChannel,
+				Queues:                 tt.fields.Queues,
+				ContextCancel:          tt.fields.ContextCancel,
+				Context:                tt.fields.Context,
+				Config:                 tt.fields.Config,
+				MemberlistShutdownFunc: tt.fields.MemberlistShutdownFunc,
 			}
 
 			fairyMQ.Wg.Add(1)
@@ -189,7 +221,7 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 			fairyMQ.Wg.Add(1)
 			go func() {
 				defer fairyMQ.Wg.Done()
-				udpAddr, err := net.ResolveUDPAddr("udp", "0.0.0.0:5991")
+				udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", fairyMQ.Config.BindAddress, fairyMQ.Config.BindPort))
 				if err != nil {
 					t.Errorf("TestFairyMQ_StartUDPListener() error = %v", err)
 				}

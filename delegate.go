@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"slices"
 	"sync"
@@ -22,13 +23,28 @@ type SyncMessage struct {
 	Timestamp time.Time `json:"Timestamp"`
 }
 
+type NodeMeta struct {
+	Name           string
+	BindAddress    string
+	MemberlistPort uint
+}
+
 type Delegate struct {
 	fairyMQ *FairyMQ
 }
 
 func (delegate *Delegate) NodeMeta(limit int) []byte {
+	meta := NodeMeta{
+		Name:           fmt.Sprintf("%s:%d", delegate.fairyMQ.config.BindAddress, delegate.fairyMQ.config.MemberlistPort),
+		BindAddress:    delegate.fairyMQ.config.BindAddress,
+		MemberlistPort: delegate.fairyMQ.config.MemberlistPort,
+	}
 	mb := make([]byte, limit)
-	// TODO: Return the meta for this current node
+	mb, err := json.Marshal(meta)
+	if err != nil {
+		log.Println("Error: ", err)
+		return []byte{}
+	}
 	return mb
 }
 

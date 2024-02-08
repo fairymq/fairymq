@@ -10,6 +10,7 @@ func (fairyMQ *FairyMQ) SetupMemberListCluster() (func() error, error) {
 	config := memberlist.DefaultWANConfig()
 	config.Name = fmt.Sprintf("%s:%d", fairyMQ.Config.BindAddress, fairyMQ.Config.MemberlistPort)
 	config.ProtocolVersion = memberlist.ProtocolVersionMax
+	config.PushPullInterval = fairyMQ.Config.PushPullInterval
 	config.BindAddr = fairyMQ.Config.BindAddress
 	config.BindPort = int(fairyMQ.Config.MemberlistPort)
 	config.AdvertisePort = int(fairyMQ.Config.MemberlistPort)

@@ -103,6 +103,7 @@ func main() {
 				log.Println(err.Error())
 				os.Exit(1)
 			}
+			// TODO: Log key generation success
 		}
 	}
 
@@ -139,9 +140,12 @@ func (fairyMQ *FairyMQ) SignalListener() {
 		case sig := <-fairyMQ.SignalChannel:
 			log.Println("received", sig)
 			fairyMQ.ContextCancel()
-			if err := fairyMQ.Conn.Close(); err != nil {
-				log.Println(err)
+			if fairyMQ.Conn != nil {
+				if err := fairyMQ.Conn.Close(); err != nil {
+					log.Println(err)
+				}
 			}
+
 			fairyMQ.Snapshot()
 			if err := fairyMQ.MemberlistShutdownFunc(); err != nil {
 				log.Println(err)

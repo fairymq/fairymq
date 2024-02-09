@@ -14,6 +14,7 @@ type Config struct {
 	JoinAddresses         []string
 	PushPullInterval      time.Duration
 	KeyDirectory          string
+	keySyncInterval       time.Duration
 }
 
 func GetConfig() Config {
@@ -39,6 +40,7 @@ func GetConfig() Config {
 	bindPort := flag.Uint("bind-port", 5991, "The port to bind to.   --bind-port=5991")
 	memberlistPort := flag.Uint("memberlist-port", 7946, "Port used by this node to communicate with other nodes in the cluster.   --memberlist-port=7946")
 	keyDirectory := flag.String("key-directory", "./keys", "The directory used to store the generated queue keys.   ---key-directory=keys")
+	keySyncInterval := flag.Duration("key-sync-interval", 5*time.Second, "The interval between syncing the private keys from the key directory to the in-memory map.   --key-sync-interval=5s")
 
 	flag.Parse()
 
@@ -50,6 +52,7 @@ func GetConfig() Config {
 		GenerateQueueKeyPairs: generateQueueKeyPairs,
 		JoinAddresses:         joinAddresses,
 		KeyDirectory:          *keyDirectory,
+		keySyncInterval:       *keySyncInterval,
 	}
 
 	return config

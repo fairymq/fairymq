@@ -135,23 +135,25 @@ func main() {
 	go fairyMQ.RemoveExpired() // Start remove expired process
 
 	fairyMQ.Wg.Add(1)
-	go func() {
-		defer fairyMQ.Wg.Done()
-
-		for {
-			if fairyMQ.Context.Err() != nil { // If signaled to shut down
-				break
-			}
-			if err := fairyMQ.PrivateKeys.LoadKeys(); err != nil {
-				log.Println(err)
-			}
-			<-time.After(5 * time.Second)
-		}
-	}()
+	go fairyMQ.SyncPrivateKeys() // Start process to periodically sync private keys from file system into memory
 
 	fairyMQ.RecoverQueues() // Recover persisted queues
 
 	fairyMQ.Wg.Wait() // Wait for all go routines
+}
+
+func (fairyMQ *FairyMQ) SyncPrivateKeys() {
+	defer fairyMQ.Wg.Done()
+
+	for {
+		if fairyMQ.Context.Err() != nil { // If signaled to shut down
+			break
+		}
+		if err := fairyMQ.PrivateKeys.LoadKeys(); err != nil {
+			log.Println(err)
+		}
+		<-time.After(fairyMQ.Config.keySyncInterval)
+	}
 }
 
 // SignalListener listens for system signals and gracefully shuts down

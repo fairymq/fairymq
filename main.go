@@ -134,6 +134,21 @@ func main() {
 	fairyMQ.Wg.Add(1)
 	go fairyMQ.RemoveExpired() // Start remove expired process
 
+	fairyMQ.Wg.Add(1)
+	go func() {
+		defer fairyMQ.Wg.Done()
+
+		for {
+			if fairyMQ.Context.Err() != nil { // If signaled to shut down
+				break
+			}
+			if err := fairyMQ.PrivateKeys.LoadKeys(); err != nil {
+				log.Println(err)
+			}
+			<-time.After(5 * time.Second)
+		}
+	}()
+
 	fairyMQ.RecoverQueues() // Recover persisted queues
 
 	fairyMQ.Wg.Wait() // Wait for all go routines

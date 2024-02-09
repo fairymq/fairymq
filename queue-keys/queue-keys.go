@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"slices"
 	"strings"
 	"sync"
 )
@@ -20,14 +19,14 @@ type PrivateKeyConfig struct {
 // PrivateKeyContainer holds the keys used to decrypt queue messages
 type PrivateKeyContainer struct {
 	config PrivateKeyConfig
-	keys   []*rsa.PrivateKey
+	keys   map[string]*rsa.PrivateKey
 	mut    *sync.RWMutex
 }
 
 func NewPrivateKeyContainer(config PrivateKeyConfig) PrivateKeyContainer {
 	return PrivateKeyContainer{
 		config: config,
-		keys:   make([]*rsa.PrivateKey, 0),
+		keys:   make(map[string]*rsa.PrivateKey),
 		mut:    &sync.RWMutex{},
 	}
 }
@@ -74,25 +73,22 @@ func (pk *PrivateKeyContainer) GenerateQueueKeypair(queue string) error {
 		return err
 	}
 
-	pk.Add(privateKey)
+	pk.Add(queue, privateKey)
 
 	return nil
 }
 
-func (pk *PrivateKeyContainer) Add(key *rsa.PrivateKey) {
+func (pk *PrivateKeyContainer) Add(queue string, key *rsa.PrivateKey) {
 	pk.mut.Lock()
 	defer pk.mut.Unlock()
 
-	// TODO: Remove log statements
-
-	if !slices.ContainsFunc(pk.keys, func(k *rsa.PrivateKey) bool {
-		return key.Equal(k)
-	}) {
-		fmt.Println("Adding key to key list")
-		pk.keys = append(pk.keys, key)
-	} else {
-		fmt.Println("This key already exists, skipping")
+	for _, k := range pk.keys {
+		if k.Equal(key) {
+			return
+		}
 	}
+
+	pk.keys[queue] = key
 }
 
 func (pk *PrivateKeyContainer) LoadKeys() error {
@@ -112,9 +108,33 @@ func (pk *PrivateKeyContainer) LoadKeys() error {
 			if err != nil {
 				return err
 			}
-			pk.Add(privateKey)
+
+			queue := file.Name()[:strings.Index(file.Name(), ".private.pem")]
+			pk.Add(queue, privateKey)
 		}
 	}
 
+	pk.mut.RLock()
+	defer pk.mut.RUnlock()
+
 	return nil
+}
+
+func (pk *PrivateKeyContainer) DecryptMessage(buf []byte) (string, string, error) {
+	var queue string
+	var decrypted []byte
+	var err error
+
+	pk.mut.RLock()
+	defer pk.mut.RUnlock()
+
+	for q, key := range pk.keys {
+		decrypted, err = rsa.DecryptPKCS1v15(rand.Reader, key, buf)
+		if err == nil {
+			queue = q
+			break
+		}
+	}
+
+	return queue, string(decrypted), err
 }

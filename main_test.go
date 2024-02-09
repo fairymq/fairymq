@@ -56,6 +56,10 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 				Wg:                     &sync.WaitGroup{},
 				SignalChannel:          make(chan os.Signal),
 				MemberlistShutdownFunc: func() error { return nil },
+				Config: Config{
+					BindAddress: "0.0.0.0",
+					BindPort:    5991,
+				},
 			},
 		},
 	}
@@ -74,7 +78,7 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 				MemberlistShutdownFunc: tt.fields.MemberlistShutdownFunc,
 			}
 
-			fairyMQ.UDPAddr, err = net.ResolveUDPAddr("udp", "0.0.0.0:5991")
+			fairyMQ.UDPAddr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", fairyMQ.Config.BindAddress, fairyMQ.Config.BindPort))
 			if err != nil {
 				t.Errorf("TestFairyMQ_SignalListener() error = %v", err)
 			}

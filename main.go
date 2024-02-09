@@ -79,6 +79,12 @@ type Message struct {
 	AcknowledgedConsumers []Consumer // Which consumers acknowledged this message? if any
 }
 
+// PrivateKeys holds the keys used to decrypt queue messages
+type PrivateKeys struct {
+	keys []*rsa.PrivateKey
+	mut  sync.RWMutex
+}
+
 // Global variables
 var (
 	fairyMQ *FairyMQ // Main fairyMQ pointer

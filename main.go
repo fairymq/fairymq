@@ -29,6 +29,7 @@ import (
 	"crypto/x509"
 	"encoding/gob"
 	"encoding/pem"
+	keys "fairymq/queue-keys"
 	"fmt"
 	"log"
 	"net"
@@ -44,18 +45,18 @@ import (
 
 // FairyMQ is the fairyMQ system structure
 type FairyMQ struct {
-	UDPAddr                *net.UDPAddr           // UDP address representation
-	Conn                   *net.UDPConn           // Conn is the implementation of the Conn and PacketConn interfaces for UDP network connections
-	Wg                     *sync.WaitGroup        // WaitGroup pointer
-	SignalChannel          chan os.Signal         // Signal channel
-	Queues                 map[string]*Queue      // In-memory queues
-	Consumers              []Consumer             // Consumer
-	ContextCancel          context.CancelFunc     // To cancel on signal
-	Context                context.Context        // For signal cancellation
-	QueueMutexes           map[string]*sync.Mutex // Individual queue mutexes
-	Config                 Config                 // Server configuration
-	MemberlistShutdownFunc func() error           // Function called when withdrawing memberlist cluster membership
-	PrivateKeys            PrivateKeys            // Hold private keys in-memory
+	UDPAddr                *net.UDPAddr             // UDP address representation
+	Conn                   *net.UDPConn             // Conn is the implementation of the Conn and PacketConn interfaces for UDP network connections
+	Wg                     *sync.WaitGroup          // WaitGroup pointer
+	SignalChannel          chan os.Signal           // Signal channel
+	Queues                 map[string]*Queue        // In-memory queues
+	Consumers              []Consumer               // Consumer
+	ContextCancel          context.CancelFunc       // To cancel on signal
+	Context                context.Context          // For signal cancellation
+	QueueMutexes           map[string]*sync.Mutex   // Individual queue mutexes
+	Config                 Config                   // Server configuration
+	MemberlistShutdownFunc func() error             // Function called when withdrawing memberlist cluster membership
+	PrivateKeys            keys.PrivateKeyContainer // Handles all private key functionality
 }
 
 // Queue is the fairyMQ queue structure
@@ -80,28 +81,23 @@ type Message struct {
 	AcknowledgedConsumers []Consumer // Which consumers acknowledged this message? if any
 }
 
-// PrivateKeys holds the keys used to decrypt queue messages
-type PrivateKeys struct {
-	keys []*rsa.PrivateKey
-	mut  *sync.RWMutex
-}
-
 // Global variables
 var (
 	fairyMQ *FairyMQ // Main fairyMQ pointer
 )
 
 func main() {
+	config := GetConfig()
+
 	fairyMQ = &FairyMQ{
 		Wg:            &sync.WaitGroup{},            // Setting WaitGroup pointer to hold go routines
 		SignalChannel: make(chan os.Signal, 1),      // Make signal channel
 		Queues:        make(map[string]*Queue),      // Make queues in-memory hashmap
 		QueueMutexes:  make(map[string]*sync.Mutex), // Make queue mutexes hashmap
-		Config:        GetConfig(),                  // Calling GetConfig
-		PrivateKeys: PrivateKeys{
-			keys: make([]*rsa.PrivateKey, 0),
-			mut:  &sync.RWMutex{},
-		},
+		Config:        config,
+		PrivateKeys: keys.NewPrivateKeyContainer(keys.PrivateKeyConfig{
+			KeyDirectory: config.KeyDirectory,
+		}),
 	} // Set fairyMQ global pointer
 
 	generateQueueKeyPairs := fairyMQ.Config.GenerateQueueKeyPairs
@@ -167,56 +163,6 @@ func (fairyMQ *FairyMQ) SignalListener() {
 			continue
 		}
 	}
-}
-
-// GenerateQueueKeypair creates a queue keypair
-func (fairyMQ *FairyMQ) GenerateQueueKeypair(queue string) error {
-	fairyMQ.PrivateKeys.mut.Lock()
-	defer fairyMQ.PrivateKeys.mut.Unlock()
-
-	if _, err := os.Stat("./keys"); err != nil {
-		if os.IsNotExist(err) {
-			err := os.Mkdir("keys", 0777)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return err
-	}
-
-	publicKey := &privateKey.PublicKey
-
-	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	})
-
-	err = os.WriteFile(fmt.Sprintf("keys/%s.private.pem", queue), privateKeyPEM, 0644)
-	if err != nil {
-		return err
-	}
-
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
-	if err != nil {
-		return err
-	}
-	publicKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PUBLIC KEY",
-		Bytes: publicKeyBytes,
-	})
-	err = os.WriteFile(fmt.Sprintf("keys/%s.public.pem", queue), publicKeyPEM, 0644)
-	if err != nil {
-		return err
-	}
-
-	fairyMQ.PrivateKeys.keys = append(fairyMQ.PrivateKeys.keys, privateKey)
-
-	return nil
 }
 
 // RemoveExpired removes expired messages from queue if queue is configured to do so.

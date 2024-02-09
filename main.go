@@ -55,6 +55,7 @@ type FairyMQ struct {
 	QueueMutexes           map[string]*sync.Mutex // Individual queue mutexes
 	Config                 Config                 // Server configuration
 	MemberlistShutdownFunc func() error           // Function called when withdrawing memberlist cluster membership
+	PrivateKeys            PrivateKeys            // Hold private keys in-memory
 }
 
 // Queue is the fairyMQ queue structure
@@ -82,7 +83,7 @@ type Message struct {
 // PrivateKeys holds the keys used to decrypt queue messages
 type PrivateKeys struct {
 	keys []*rsa.PrivateKey
-	mut  sync.RWMutex
+	mut  *sync.RWMutex
 }
 
 // Global variables
@@ -97,6 +98,10 @@ func main() {
 		Queues:        make(map[string]*Queue),      // Make queues in-memory hashmap
 		QueueMutexes:  make(map[string]*sync.Mutex), // Make queue mutexes hashmap
 		Config:        GetConfig(),                  // Calling GetConfig
+		PrivateKeys: PrivateKeys{
+			keys: make([]*rsa.PrivateKey, 0),
+			mut:  &sync.RWMutex{},
+		},
 	} // Set fairyMQ global pointer
 
 	generateQueueKeyPairs := fairyMQ.Config.GenerateQueueKeyPairs
@@ -166,6 +171,9 @@ func (fairyMQ *FairyMQ) SignalListener() {
 
 // GenerateQueueKeypair creates a queue keypair
 func (fairyMQ *FairyMQ) GenerateQueueKeypair(queue string) error {
+	fairyMQ.PrivateKeys.mut.Lock()
+	defer fairyMQ.PrivateKeys.mut.Unlock()
+
 	if _, err := os.Stat("./keys"); err != nil {
 		if os.IsNotExist(err) {
 			err := os.Mkdir("keys", 0777)
@@ -205,6 +213,8 @@ func (fairyMQ *FairyMQ) GenerateQueueKeypair(queue string) error {
 	if err != nil {
 		return err
 	}
+
+	fairyMQ.PrivateKeys.keys = append(fairyMQ.PrivateKeys.keys, privateKey)
 
 	return nil
 }

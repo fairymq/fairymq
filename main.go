@@ -105,7 +105,7 @@ func main() {
 	// If queue provided generate a new keypair
 	if len(generateQueueKeyPairs) > 0 {
 		for _, queue := range generateQueueKeyPairs {
-			err := fairyMQ.GenerateQueueKeypair(queue)
+			err := fairyMQ.PrivateKeys.GenerateQueueKeypair(queue)
 			if err != nil {
 				log.Println(err.Error())
 				os.Exit(1)

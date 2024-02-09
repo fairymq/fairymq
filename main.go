@@ -392,193 +392,195 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 			}
 		}
 
-		queue, plaintext, err := fairyMQ.PrivateKeys.DecryptMessage(buf[0:n])
-		if err != nil {
-			fairyMQ.Conn.WriteToUDP([]byte("NACK\r\n"), addr)
-		}
-
-		_, ok := fairyMQ.Queues[queue]
-		if !ok {
-			fairyMQ.Queues[queue] = &Queue{
-				ExpireMessages: false,
-				ExpiryTime:     7200,
-				Messages:       []Message{},
-				Consumers:      []string{},
+		go func() {
+			queue, plaintext, err := fairyMQ.PrivateKeys.DecryptMessage(buf[0:n])
+			if err != nil {
+				fairyMQ.Conn.WriteToUDP([]byte("NACK\r\n"), addr)
 			}
-			_, ok = fairyMQ.QueueMutexes[queue]
+
+			_, ok := fairyMQ.Queues[queue]
 			if !ok {
-				fairyMQ.QueueMutexes[queue] = &sync.Mutex{}
-			}
-		}
-
-		switch {
-		case bytes.HasPrefix(plaintext, []byte("MSGS WITH KEY ")):
-			spl := bytes.Split(plaintext, []byte("MSGS WITH KEY "))
-
-			if len(spl) < 2 {
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
-				continue
-			}
-
-			var messages [][]byte
-
-			// Will implement faster search
-			for _, m := range fairyMQ.Queues[queue].Messages {
-				if m.Key == string(spl[1]) {
-					messages = append(messages, m.Data)
+				fairyMQ.Queues[queue] = &Queue{
+					ExpireMessages: false,
+					ExpiryTime:     7200,
+					Messages:       []Message{},
+					Consumers:      []string{},
+				}
+				_, ok = fairyMQ.QueueMutexes[queue]
+				if !ok {
+					fairyMQ.QueueMutexes[queue] = &sync.Mutex{}
 				}
 			}
 
-			fairyMQ.Conn.WriteToUDP(append(bytes.Join(messages, []byte("\r\r")), []byte("\r\n")...), addr)
+			switch {
+			case bytes.HasPrefix(plaintext, []byte("MSGS WITH KEY ")):
+				spl := bytes.Split(plaintext, []byte("MSGS WITH KEY "))
 
-		case bytes.HasPrefix(plaintext, []byte("EXP MSGS ")):
-			spl := bytes.Split(plaintext, []byte("EXP MSGS "))
+				if len(spl) < 2 {
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+					return
+				}
 
-			if len(spl) < 2 {
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
-				continue
-			}
+				var messages [][]byte
 
-			boolI, err := strconv.Atoi(string(spl[1]))
-			if err != nil {
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
-				continue
-			}
-
-			if boolI > 0 {
-				fairyMQ.Queues[queue].ExpireMessages = true
-			} else {
-				fairyMQ.Queues[queue].ExpireMessages = false
-			}
-
-			fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
-
-		case bytes.HasPrefix(plaintext, []byte("EXP MSGS SEC ")):
-			spl := bytes.Split(plaintext, []byte("EXP MSGS SEC "))
-
-			if len(spl) < 2 {
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
-				continue
-			}
-
-			seconds, err := strconv.Atoi(string(spl[1]))
-			if err != nil {
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
-				continue
-			}
-
-			fairyMQ.Queues[queue].ExpiryTime = uint(seconds)
-
-			fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
-
-		case bytes.HasPrefix(plaintext, []byte("FIRST IN")):
-			fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue].Messages[0].Data, []byte("\r\n")...), addr)
-			continue
-		case bytes.HasPrefix(plaintext, []byte("LAST IN")):
-			fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue].Messages[len(fairyMQ.Queues[string(queue)].Messages)-1].Data, []byte("\r\n")...), addr)
-			continue
-		case bytes.HasPrefix(plaintext, []byte("LENGTH")):
-			fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("%d messages", len(fairyMQ.Queues[string(queue)].Messages))), []byte("\r\n")...), addr)
-			continue
-		case bytes.HasPrefix(plaintext, []byte("POP")):
-			if len(fairyMQ.Queues[queue].Messages) > 1 {
-				fairyMQ.QueueMutexes[queue].Lock()
-				fairyMQ.Queues[queue].Messages = fairyMQ.Queues[queue].Messages[:len(fairyMQ.Queues[string(queue)].Messages)-1]
-				fairyMQ.QueueMutexes[queue].Unlock()
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
-			} else {
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
-			}
-			continue
-		case bytes.HasPrefix(plaintext, []byte("SHIFT")):
-			if len(fairyMQ.Queues[queue].Messages) > 1 {
-				fairyMQ.QueueMutexes[queue].Lock()
-				fairyMQ.Queues[queue].Messages = fairyMQ.Queues[queue].Messages[1:]
-				fairyMQ.QueueMutexes[queue].Unlock()
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
-			} else {
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
-			}
-			continue
-		case bytes.HasPrefix(plaintext, []byte("CLEAR")):
-			if len(fairyMQ.Queues[queue].Messages) > 0 {
-				fairyMQ.QueueMutexes[queue].Lock()
-				delete(fairyMQ.Queues, queue)
-				fairyMQ.QueueMutexes[queue].Unlock()
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
-			} else {
-				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
-			}
-			continue
-		case bytes.HasPrefix(plaintext, []byte("NEW CONSUMER ")):
-			spl := bytes.Split(plaintext, []byte("NEW CONSUMER "))
-
-			for _, c := range fairyMQ.Consumers {
-				if c.Queue == queue {
-					if c.Address == strings.TrimSpace(string(spl[1])) {
-						fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
-						continue
+				// Will implement faster search
+				for _, m := range fairyMQ.Queues[queue].Messages {
+					if m.Key == string(spl[1]) {
+						messages = append(messages, m.Data)
 					}
 				}
-			}
 
-			fairyMQ.Consumers = append(fairyMQ.Consumers, Consumer{
-				Queue:   queue,
-				Address: strings.TrimSpace(string(spl[1])),
-			})
-			fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
-			continue
-		case bytes.HasPrefix(plaintext, []byte("REM CONSUMER ")):
-			spl := bytes.Split(plaintext, []byte("REM CONSUMER "))
-			fairyMQ.Consumers = append(fairyMQ.Consumers, Consumer{
-				Queue:   queue,
-				Address: strings.TrimSpace(string(spl[1])),
-			})
-			fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
-			continue
-		case bytes.HasPrefix(plaintext, []byte("LIST CONSUMERS")):
-			var consumers []string
+				fairyMQ.Conn.WriteToUDP(append(bytes.Join(messages, []byte("\r\r")), []byte("\r\n")...), addr)
 
-			for _, c := range fairyMQ.Consumers {
-				if c.Queue == queue {
-					consumers = append(consumers, c.Address)
+			case bytes.HasPrefix(plaintext, []byte("EXP MSGS ")):
+				spl := bytes.Split(plaintext, []byte("EXP MSGS "))
+
+				if len(spl) < 2 {
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+					return
 				}
+
+				boolI, err := strconv.Atoi(string(spl[1]))
+				if err != nil {
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+					return
+				}
+
+				if boolI > 0 {
+					fairyMQ.Queues[queue].ExpireMessages = true
+				} else {
+					fairyMQ.Queues[queue].ExpireMessages = false
+				}
+
+				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+
+			case bytes.HasPrefix(plaintext, []byte("EXP MSGS SEC ")):
+				spl := bytes.Split(plaintext, []byte("EXP MSGS SEC "))
+
+				if len(spl) < 2 {
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+					return
+				}
+
+				seconds, err := strconv.Atoi(string(spl[1]))
+				if err != nil {
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+					return
+				}
+
+				fairyMQ.Queues[queue].ExpiryTime = uint(seconds)
+
+				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+
+			case bytes.HasPrefix(plaintext, []byte("FIRST IN")):
+				fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue].Messages[0].Data, []byte("\r\n")...), addr)
+				return
+			case bytes.HasPrefix(plaintext, []byte("LAST IN")):
+				fairyMQ.Conn.WriteToUDP(append(fairyMQ.Queues[queue].Messages[len(fairyMQ.Queues[string(queue)].Messages)-1].Data, []byte("\r\n")...), addr)
+				return
+			case bytes.HasPrefix(plaintext, []byte("LENGTH")):
+				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("%d messages", len(fairyMQ.Queues[string(queue)].Messages))), []byte("\r\n")...), addr)
+				return
+			case bytes.HasPrefix(plaintext, []byte("POP")):
+				if len(fairyMQ.Queues[queue].Messages) > 1 {
+					fairyMQ.QueueMutexes[queue].Lock()
+					fairyMQ.Queues[queue].Messages = fairyMQ.Queues[queue].Messages[:len(fairyMQ.Queues[string(queue)].Messages)-1]
+					fairyMQ.QueueMutexes[queue].Unlock()
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+				} else {
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+				}
+				return
+			case bytes.HasPrefix(plaintext, []byte("SHIFT")):
+				if len(fairyMQ.Queues[queue].Messages) > 1 {
+					fairyMQ.QueueMutexes[queue].Lock()
+					fairyMQ.Queues[queue].Messages = fairyMQ.Queues[queue].Messages[1:]
+					fairyMQ.QueueMutexes[queue].Unlock()
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+				} else {
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+				}
+				return
+			case bytes.HasPrefix(plaintext, []byte("CLEAR")):
+				if len(fairyMQ.Queues[queue].Messages) > 0 {
+					fairyMQ.QueueMutexes[queue].Lock()
+					delete(fairyMQ.Queues, queue)
+					fairyMQ.QueueMutexes[queue].Unlock()
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+				} else {
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+				}
+				return
+			case bytes.HasPrefix(plaintext, []byte("NEW CONSUMER ")):
+				spl := bytes.Split(plaintext, []byte("NEW CONSUMER "))
+
+				for _, c := range fairyMQ.Consumers {
+					if c.Queue == queue {
+						if c.Address == strings.TrimSpace(string(spl[1])) {
+							fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
+							continue
+						}
+					}
+				}
+
+				fairyMQ.Consumers = append(fairyMQ.Consumers, Consumer{
+					Queue:   queue,
+					Address: strings.TrimSpace(string(spl[1])),
+				})
+				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+				return
+			case bytes.HasPrefix(plaintext, []byte("REM CONSUMER ")):
+				spl := bytes.Split(plaintext, []byte("REM CONSUMER "))
+				fairyMQ.Consumers = append(fairyMQ.Consumers, Consumer{
+					Queue:   queue,
+					Address: strings.TrimSpace(string(spl[1])),
+				})
+				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("ACK")), []byte("\r\n")...), addr)
+				return
+			case bytes.HasPrefix(plaintext, []byte("LIST CONSUMERS")):
+				var consumers []string
+
+				for _, c := range fairyMQ.Consumers {
+					if c.Queue == queue {
+						consumers = append(consumers, c.Address)
+					}
+				}
+
+				fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf(strings.Join(consumers, ","))), []byte("\r\n")...), addr)
+				return
+			case bytes.HasPrefix(plaintext, []byte("ENQUEUE")) || bytes.HasPrefix(plaintext, []byte("ENQUEUE ")):
+				messageKey := "" // usually empty unless provided
+
+				if bytes.HasPrefix(plaintext, []byte("ENQUEUE ")) { // has key
+					spl := bytes.Split(plaintext, []byte("ENQUEUE "))
+					messageKey = string(bytes.Split(spl[1], []byte("\r\n"))[0]) // They are not unique
+				}
+
+				spl := bytes.Split(plaintext, []byte("\r\n"))
+				timestamp, err := strconv.ParseInt(string(spl[1]), 10, 64)
+				if err != nil {
+					return
+				}
+
+				message := Message{
+					Data:      spl[2],
+					Key:       messageKey,
+					Timestamp: time.UnixMicro(timestamp),
+				}
+
+				go fairyMQ.SendToConsumers(queue, plaintext, &message)
+				fairyMQ.QueueMutexes[queue].Lock()
+				fairyMQ.Queues[queue].Messages = append(fairyMQ.Queues[queue].Messages, message)
+				sort.Slice(fairyMQ.Queues[queue].Messages, func(i, j int) bool {
+					return fairyMQ.Queues[queue].Messages[i].Timestamp.After(fairyMQ.Queues[queue].Messages[j].Timestamp)
+				})
+				fairyMQ.QueueMutexes[queue].Unlock()
+
+				fairyMQ.Conn.WriteToUDP([]byte("ACK\r\n"), addr)
+				return
+			default:
+				fairyMQ.Conn.WriteToUDP([]byte("NACK\r\n"), addr)
 			}
-
-			fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf(strings.Join(consumers, ","))), []byte("\r\n")...), addr)
-			continue
-		case bytes.HasPrefix(plaintext, []byte("ENQUEUE")) || bytes.HasPrefix(plaintext, []byte("ENQUEUE ")):
-			messageKey := "" // usually empty unless provided
-
-			if bytes.HasPrefix(plaintext, []byte("ENQUEUE ")) { // has key
-				spl := bytes.Split(plaintext, []byte("ENQUEUE "))
-				messageKey = string(bytes.Split(spl[1], []byte("\r\n"))[0]) // They are not unique
-			}
-
-			spl := bytes.Split(plaintext, []byte("\r\n"))
-			timestamp, err := strconv.ParseInt(string(spl[1]), 10, 64)
-			if err != nil {
-				continue
-			}
-
-			message := Message{
-				Data:      spl[2],
-				Key:       messageKey,
-				Timestamp: time.UnixMicro(timestamp),
-			}
-
-			go fairyMQ.SendToConsumers(queue, plaintext, &message)
-			fairyMQ.QueueMutexes[queue].Lock()
-			fairyMQ.Queues[queue].Messages = append(fairyMQ.Queues[queue].Messages, message)
-			sort.Slice(fairyMQ.Queues[queue].Messages, func(i, j int) bool {
-				return fairyMQ.Queues[queue].Messages[i].Timestamp.After(fairyMQ.Queues[queue].Messages[j].Timestamp)
-			})
-			fairyMQ.QueueMutexes[queue].Unlock()
-
-			fairyMQ.Conn.WriteToUDP([]byte("ACK\r\n"), addr)
-			continue
-		default:
-			fairyMQ.Conn.WriteToUDP([]byte("NACK\r\n"), addr)
-		}
+		}()
 	}
 }

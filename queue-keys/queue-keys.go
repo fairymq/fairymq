@@ -7,6 +7,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"path"
+	"slices"
+	"strings"
 	"sync"
 )
 
@@ -80,11 +83,38 @@ func (pk *PrivateKeyContainer) Add(key *rsa.PrivateKey) {
 	pk.mut.Lock()
 	defer pk.mut.Unlock()
 
-	// TODO: Check if the key already exists in the key slice
+	// TODO: Remove log statements
 
-	pk.keys = append(pk.keys, key)
+	if !slices.ContainsFunc(pk.keys, func(k *rsa.PrivateKey) bool {
+		return key.Equal(k)
+	}) {
+		fmt.Println("Adding key to key list")
+		pk.keys = append(pk.keys, key)
+	} else {
+		fmt.Println("This key already exists, skipping")
+	}
 }
 
-func (pk *PrivateKeyContainer) LoadKeys() {
-	// TODO: Load keys from files into memory
+func (pk *PrivateKeyContainer) LoadKeys() error {
+	files, err := os.ReadDir(pk.config.KeyDirectory)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), "private.pem") {
+			privateKeyPEM, err := os.ReadFile(path.Join(pk.config.KeyDirectory, file.Name()))
+			if err != nil {
+				return err
+			}
+			privateKeyBlock, _ := pem.Decode(privateKeyPEM)
+			privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyBlock.Bytes)
+			if err != nil {
+				return err
+			}
+			pk.Add(privateKey)
+		}
+	}
+
+	return nil
 }

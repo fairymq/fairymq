@@ -358,16 +358,6 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 		return
 	}
 
-	if _, err := os.Stat("./keys"); err != nil {
-		if os.IsNotExist(err) {
-			err := os.Mkdir("keys", 0777)
-			if err != nil {
-				log.Println("ERROR: ", err.Error())
-				fairyMQ.SignalChannel <- os.Interrupt
-			}
-		}
-	}
-
 	for {
 		fairyMQ.Conn.SetReadDeadline(time.Now().Add(time.Nanosecond * 10000)) // essentially keep listening until the client closes connection or cluster shuts down
 

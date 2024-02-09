@@ -120,7 +120,7 @@ func (pk *PrivateKeyContainer) LoadKeys() error {
 	return nil
 }
 
-func (pk *PrivateKeyContainer) DecryptMessage(buf []byte) (string, string, error) {
+func (pk *PrivateKeyContainer) DecryptMessage(buf []byte) (string, []byte, error) {
 	var queue string
 	var decrypted []byte
 	var err error
@@ -136,5 +136,5 @@ func (pk *PrivateKeyContainer) DecryptMessage(buf []byte) (string, string, error
 		}
 	}
 
-	return queue, string(decrypted), err
+	return queue, decrypted, err
 }

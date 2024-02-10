@@ -23,78 +23,28 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rsa"
+	keys "fairymq/queue-keys"
 	"fmt"
-	"log"
 	"net"
 	"os"
-	"path"
 	"strings"
 	"sync"
 	"testing"
 )
 
-func TestFairyMQ_GenerateQueueKeypair(t *testing.T) {
-	type fields struct {
-		UDPAddr                *net.UDPAddr
-		Conn                   *net.UDPConn
-		Wg                     *sync.WaitGroup
-		SignalChannel          chan os.Signal
-		Queues                 map[string]*Queue
-		ContextCancel          context.CancelFunc
-		Context                context.Context
-		Config                 Config
-		MemberlistShutdownFunc func() error
-	}
-	type args struct {
-		queue string
-	}
+type MockPrivateKeyContainer struct {
+}
 
-	tests := []struct {
-		name    string
-		fields  fields
-		want    []byte
-		wantErr bool
-		args    args
-	}{
-		{name: "test", wantErr: false, args: args{queue: "test"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fairyMQ := &FairyMQ{
-				UDPAddr:                tt.fields.UDPAddr,
-				Conn:                   tt.fields.Conn,
-				Wg:                     tt.fields.Wg,
-				SignalChannel:          tt.fields.SignalChannel,
-				Queues:                 tt.fields.Queues,
-				ContextCancel:          tt.fields.ContextCancel,
-				Context:                tt.fields.Context,
-				Config:                 tt.fields.Config,
-				MemberlistShutdownFunc: tt.fields.MemberlistShutdownFunc,
-			}
-			if err := fairyMQ.GenerateQueueKeypair(tt.args.queue); (err != nil) != tt.wantErr {
-				t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v, wantErr %v", err, tt.wantErr)
-			} else {
-				wd, err := os.Getwd()
-				if err != nil {
-					log.Println(err)
-				}
-
-				if _, err := os.Stat(path.Join(wd, fmt.Sprintf("keys/%s.private.pem", tt.args.queue))); err != nil {
-					t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v", err)
-				}
-
-				if _, err := os.Stat(path.Join(wd, fmt.Sprintf("keys/%s.public.pem", tt.args.queue))); err != nil {
-					t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v", err)
-				}
-
-				err = os.RemoveAll(path.Join(wd, fmt.Sprintf("keys")))
-				if err != nil {
-					t.Errorf("TestFairyMQ_GenerateQueueKeypair() error = %v", err)
-				}
-			}
-		})
-	}
+func (mpk MockPrivateKeyContainer) GenerateQueueKeypair(queue string) error {
+	return nil
+}
+func (mpk MockPrivateKeyContainer) Add(queue string, key *rsa.PrivateKey) {}
+func (mpk MockPrivateKeyContainer) LoadKeys() error {
+	return nil
+}
+func (mpk MockPrivateKeyContainer) DecryptMessage(buf []byte) (string, []byte, error) {
+	return "test-queue", []byte("message"), nil
 }
 
 func TestFairyMQ_SignalListener(t *testing.T) {
@@ -104,10 +54,12 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 		Wg                     *sync.WaitGroup
 		SignalChannel          chan os.Signal
 		Queues                 map[string]*Queue
+		QueueMutexes           map[string]*sync.Mutex
 		ContextCancel          context.CancelFunc
 		Context                context.Context
 		Config                 Config
 		MemberlistShutdownFunc func() error
+		PrivateKeys            keys.PrivateKeyContainer
 	}
 	tests := []struct {
 		name    string
@@ -122,6 +74,13 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 				Wg:                     &sync.WaitGroup{},
 				SignalChannel:          make(chan os.Signal),
 				MemberlistShutdownFunc: func() error { return nil },
+				Queues:                 make(map[string]*Queue),
+				QueueMutexes:           make(map[string]*sync.Mutex),
+				Config: Config{
+					BindAddress: "0.0.0.0",
+					BindPort:    5991,
+				},
+				PrivateKeys: MockPrivateKeyContainer{},
 			},
 		},
 	}
@@ -134,13 +93,14 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 				Wg:                     tt.fields.Wg,
 				SignalChannel:          tt.fields.SignalChannel,
 				Queues:                 tt.fields.Queues,
+				QueueMutexes:           tt.fields.QueueMutexes,
 				ContextCancel:          tt.fields.ContextCancel,
 				Context:                tt.fields.Context,
 				Config:                 tt.fields.Config,
 				MemberlistShutdownFunc: tt.fields.MemberlistShutdownFunc,
 			}
 
-			fairyMQ.UDPAddr, err = net.ResolveUDPAddr("udp", "0.0.0.0:5991")
+			fairyMQ.UDPAddr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", fairyMQ.Config.BindAddress, fairyMQ.Config.BindPort))
 			if err != nil {
 				t.Errorf("TestFairyMQ_SignalListener() error = %v", err)
 			}
@@ -174,10 +134,12 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 		Wg                     *sync.WaitGroup
 		SignalChannel          chan os.Signal
 		Queues                 map[string]*Queue
+		QueueMutexes           map[string]*sync.Mutex
 		ContextCancel          context.CancelFunc
 		Context                context.Context
 		Config                 Config
 		MemberlistShutdownFunc func() error
+		PrivateKeys            keys.PrivateKeyContainer
 	}
 	tests := []struct {
 		name    string
@@ -191,11 +153,14 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 			fields: fields{
 				Wg:            &sync.WaitGroup{},
 				SignalChannel: make(chan os.Signal),
+				Queues:        make(map[string]*Queue),
+				QueueMutexes:  make(map[string]*sync.Mutex),
 				Config: Config{
 					BindAddress: "0.0.0.0",
 					BindPort:    5991,
 				},
 				MemberlistShutdownFunc: func() error { return nil },
+				PrivateKeys:            MockPrivateKeyContainer{},
 			},
 		},
 	}
@@ -207,10 +172,12 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 				Wg:                     tt.fields.Wg,
 				SignalChannel:          tt.fields.SignalChannel,
 				Queues:                 tt.fields.Queues,
+				QueueMutexes:           tt.fields.QueueMutexes,
 				ContextCancel:          tt.fields.ContextCancel,
 				Context:                tt.fields.Context,
 				Config:                 tt.fields.Config,
 				MemberlistShutdownFunc: tt.fields.MemberlistShutdownFunc,
+				PrivateKeys:            tt.fields.PrivateKeys,
 			}
 
 			fairyMQ.Wg.Add(1)

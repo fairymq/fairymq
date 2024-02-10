@@ -559,6 +559,7 @@ func (fairyMQ *FairyMQ) StartUDPListener() {
 				spl := bytes.Split(plaintext, []byte("\r\n"))
 				timestamp, err := strconv.ParseInt(string(spl[1]), 10, 64)
 				if err != nil {
+					fairyMQ.Conn.WriteToUDP(append([]byte(fmt.Sprintf("NACK")), []byte("\r\n")...), addr)
 					return
 				}
 

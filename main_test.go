@@ -23,6 +23,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rsa"
+	keys "fairymq/queue-keys"
 	"fmt"
 	"net"
 	"os"
@@ -31,6 +33,20 @@ import (
 	"testing"
 )
 
+type MockPrivateKeyContainer struct {
+}
+
+func (mpk MockPrivateKeyContainer) GenerateQueueKeypair(queue string) error {
+	return nil
+}
+func (mpk MockPrivateKeyContainer) Add(queue string, key *rsa.PrivateKey) {}
+func (mpk MockPrivateKeyContainer) LoadKeys() error {
+	return nil
+}
+func (mpk MockPrivateKeyContainer) DecryptMessage(buf []byte) (string, []byte, error) {
+	return "test-queue", []byte("message"), nil
+}
+
 func TestFairyMQ_SignalListener(t *testing.T) {
 	type fields struct {
 		UDPAddr                *net.UDPAddr
@@ -38,10 +54,12 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 		Wg                     *sync.WaitGroup
 		SignalChannel          chan os.Signal
 		Queues                 map[string]*Queue
+		QueueMutexes           map[string]*sync.Mutex
 		ContextCancel          context.CancelFunc
 		Context                context.Context
 		Config                 Config
 		MemberlistShutdownFunc func() error
+		PrivateKeys            keys.PrivateKeyContainer
 	}
 	tests := []struct {
 		name    string
@@ -56,10 +74,13 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 				Wg:                     &sync.WaitGroup{},
 				SignalChannel:          make(chan os.Signal),
 				MemberlistShutdownFunc: func() error { return nil },
+				Queues:                 make(map[string]*Queue),
+				QueueMutexes:           make(map[string]*sync.Mutex),
 				Config: Config{
 					BindAddress: "0.0.0.0",
 					BindPort:    5991,
 				},
+				PrivateKeys: MockPrivateKeyContainer{},
 			},
 		},
 	}
@@ -72,6 +93,7 @@ func TestFairyMQ_SignalListener(t *testing.T) {
 				Wg:                     tt.fields.Wg,
 				SignalChannel:          tt.fields.SignalChannel,
 				Queues:                 tt.fields.Queues,
+				QueueMutexes:           tt.fields.QueueMutexes,
 				ContextCancel:          tt.fields.ContextCancel,
 				Context:                tt.fields.Context,
 				Config:                 tt.fields.Config,
@@ -112,10 +134,12 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 		Wg                     *sync.WaitGroup
 		SignalChannel          chan os.Signal
 		Queues                 map[string]*Queue
+		QueueMutexes           map[string]*sync.Mutex
 		ContextCancel          context.CancelFunc
 		Context                context.Context
 		Config                 Config
 		MemberlistShutdownFunc func() error
+		PrivateKeys            keys.PrivateKeyContainer
 	}
 	tests := []struct {
 		name    string
@@ -129,11 +153,14 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 			fields: fields{
 				Wg:            &sync.WaitGroup{},
 				SignalChannel: make(chan os.Signal),
+				Queues:        make(map[string]*Queue),
+				QueueMutexes:  make(map[string]*sync.Mutex),
 				Config: Config{
 					BindAddress: "0.0.0.0",
 					BindPort:    5991,
 				},
 				MemberlistShutdownFunc: func() error { return nil },
+				PrivateKeys:            MockPrivateKeyContainer{},
 			},
 		},
 	}
@@ -145,10 +172,12 @@ func TestFairyMQ_StartUDPListener(t *testing.T) {
 				Wg:                     tt.fields.Wg,
 				SignalChannel:          tt.fields.SignalChannel,
 				Queues:                 tt.fields.Queues,
+				QueueMutexes:           tt.fields.QueueMutexes,
 				ContextCancel:          tt.fields.ContextCancel,
 				Context:                tt.fields.Context,
 				Config:                 tt.fields.Config,
 				MemberlistShutdownFunc: tt.fields.MemberlistShutdownFunc,
+				PrivateKeys:            tt.fields.PrivateKeys,
 			}
 
 			fairyMQ.Wg.Add(1)

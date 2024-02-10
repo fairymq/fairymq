@@ -95,7 +95,7 @@ func main() {
 		Queues:        make(map[string]*Queue),      // Make queues in-memory hashmap
 		QueueMutexes:  make(map[string]*sync.Mutex), // Make queue mutexes hashmap
 		Config:        config,
-		PrivateKeys: keys.NewPrivateKeyContainer(keys.PrivateKeyConfig{
+		PrivateKeys: keys.NewDefaultPrivateKeyContainer(keys.PrivateKeyConfig{
 			KeyDirectory: config.KeyDirectory,
 		}),
 	} // Set fairyMQ global pointer

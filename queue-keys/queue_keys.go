@@ -16,15 +16,24 @@ type PrivateKeyConfig struct {
 	KeyDirectory string
 }
 
-// PrivateKeyContainer holds the keys used to decrypt queue messages
-type PrivateKeyContainer struct {
+// PrivateKeyContainer is the interface required
+type PrivateKeyContainer interface {
+	GenerateQueueKeypair(queue string) error
+	Add(queue string, key *rsa.PrivateKey)
+	LoadKeys() error
+	DecryptMessage(buf []byte) (string, []byte, error)
+}
+
+// DefaultPrivateKeyContainer is the default implementation for PrivateKeyContainer.
+// It holds the keys used to decrypt queue messages.
+type DefaultPrivateKeyContainer struct {
 	config PrivateKeyConfig
 	keys   map[string]*rsa.PrivateKey
 	mut    *sync.RWMutex
 }
 
-func NewPrivateKeyContainer(config PrivateKeyConfig) PrivateKeyContainer {
-	return PrivateKeyContainer{
+func NewDefaultPrivateKeyContainer(config PrivateKeyConfig) *DefaultPrivateKeyContainer {
+	return &DefaultPrivateKeyContainer{
 		config: config,
 		keys:   make(map[string]*rsa.PrivateKey),
 		mut:    &sync.RWMutex{},
@@ -32,7 +41,7 @@ func NewPrivateKeyContainer(config PrivateKeyConfig) PrivateKeyContainer {
 }
 
 // GenerateQueueKeypair creates a queue keypair
-func (pk *PrivateKeyContainer) GenerateQueueKeypair(queue string) error {
+func (pk *DefaultPrivateKeyContainer) GenerateQueueKeypair(queue string) error {
 	if _, err := os.Stat(pk.config.KeyDirectory); err != nil {
 		if os.IsNotExist(err) {
 			err := os.MkdirAll(pk.config.KeyDirectory, 0777)
@@ -78,7 +87,7 @@ func (pk *PrivateKeyContainer) GenerateQueueKeypair(queue string) error {
 	return nil
 }
 
-func (pk *PrivateKeyContainer) Add(queue string, key *rsa.PrivateKey) {
+func (pk *DefaultPrivateKeyContainer) Add(queue string, key *rsa.PrivateKey) {
 	pk.mut.Lock()
 	defer pk.mut.Unlock()
 
@@ -91,7 +100,7 @@ func (pk *PrivateKeyContainer) Add(queue string, key *rsa.PrivateKey) {
 	pk.keys[queue] = key
 }
 
-func (pk *PrivateKeyContainer) LoadKeys() error {
+func (pk *DefaultPrivateKeyContainer) LoadKeys() error {
 	files, err := os.ReadDir(pk.config.KeyDirectory)
 	if err != nil {
 		return err
@@ -120,7 +129,7 @@ func (pk *PrivateKeyContainer) LoadKeys() error {
 	return nil
 }
 
-func (pk *PrivateKeyContainer) DecryptMessage(buf []byte) (string, []byte, error) {
+func (pk *DefaultPrivateKeyContainer) DecryptMessage(buf []byte) (string, []byte, error) {
 	var queue string
 	var decrypted []byte
 	var err error
